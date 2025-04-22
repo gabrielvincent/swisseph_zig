@@ -65,6 +65,15 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+    // Link libc
+    exe.linkLibC();
+
+    // Add include path
+    exe.addIncludePath(b.path("include"));
+
+    // Add the static library
+    exe.addObjectFile(b.path("lib/libswe.a"));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
