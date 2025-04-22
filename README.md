@@ -33,10 +33,8 @@ Follow these steps to set up the Swiss Ephemeris library with your Zig project:
 
 5. Add swisseph_zig as a dependency in your `build.zig.zon` file:
 
-   ```zig
-   .swisseph_zig = .{
-       .url = "github.com/gabrielvincent/swisseph_zig",
-   },
+   ```bash
+    zig fetch --save git+https://github.com/gabrielvincent/swisseph_zig
    ```
 
 6. Add swisseph_zig as module for your executable in `build.zig`:
