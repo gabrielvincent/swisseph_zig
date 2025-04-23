@@ -50,6 +50,64 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, serr: ?*[256]u8) SweErr!CalcOut {
     };
 }
 
+pub const HeliacalUtOut = struct {
+    visibility_start_jd: f64,
+    // Other output values from dret array
+    visibility_optimum_jd: f64,
+    visibility_end_jd: f64,
+    // Additional fields as needed based on dret array
+};
+
+pub fn heliacalUt(
+    jd_start: f64,
+    geo: [3]f64, // longitude, latitude, altitude
+    atm: [4]f64, // pressure, temperature, humidity, etc.
+    obs: [6]f64, // observer parameters
+    object_name: []const u8,
+    event_type: i32,
+    helflag: i32,
+    serr: ?*[256]u8,
+) SweErr!HeliacalUtOut {
+    var dret: [50]f64 = undefined; // Array to store results
+    var err_str: [256]u8 = undefined;
+    @memset(&err_str, 0);
+
+    var obj_name_buf: [256]u8 = undefined;
+    @memcpy(obj_name_buf[0..object_name.len], object_name);
+    obj_name_buf[object_name.len] = 0;
+    const c_object_name = &obj_name_buf;
+
+    const ret_val = sweph.swe_heliacal_ut(
+        jd_start,
+        @constCast(&geo),
+        @constCast(&atm),
+        @constCast(&obs),
+        c_object_name,
+        event_type,
+        helflag,
+        &dret,
+        &err_str,
+    );
+
+    if (ret_val < 0) {
+        if (serr) |s| {
+            @memcpy(s, &err_str);
+        }
+        return SweErr.Generic;
+    }
+
+    return HeliacalUtOut{
+        .visibility_start_jd = dret[0],
+        .visibility_optimum_jd = dret[1],
+        .visibility_end_jd = dret[2],
+        // Add more fields from dret as needed
+    };
+}
+
+pub fn setEphePath(path: [*c]const u8) void {
+    sweph.swe_set_ephe_path(path);
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
@@ -228,4 +286,94 @@ pub const defs = struct {
     pub const SEFLG_DEFAULTEPH = sweph.SEFLG_DEFAULTEPH;
 
     pub const SE_MAX_STNAME = sweph.SE_MAX_STNAME;
+
+    pub const SE_ECL_CENTRAL = sweph.SE_ECL_CENTRAL;
+    pub const SE_ECL_NONCENTRAL = sweph.SE_ECL_NONCENTRAL;
+    pub const SE_ECL_TOTAL = sweph.SE_ECL_TOTAL;
+    pub const SE_ECL_ANNULAR = sweph.SE_ECL_ANNULAR;
+    pub const SE_ECL_PARTIAL = sweph.SE_ECL_PARTIAL;
+    pub const SE_ECL_ANNULAR_TOTAL = sweph.SE_ECL_ANNULAR_TOTAL;
+    pub const SE_ECL_HYBRID = sweph.SE_ECL_HYBRID;
+    pub const SE_ECL_PENUMBRAL = sweph.SE_ECL_PENUMBRAL;
+    pub const SE_ECL_ALLTYPES_SOLAR = sweph.SE_ECL_ALLTYPES_SOLAR;
+    pub const SE_ECL_ALLTYPES_LUNAR = sweph.SE_ECL_ALLTYPES_LUNAR;
+    pub const SE_ECL_VISIBLE = sweph.SE_ECL_VISIBLE;
+    pub const SE_ECL_MAX_VISIBLE = sweph.SE_ECL_MAX_VISIBLE;
+    pub const SE_ECL_1ST_VISIBLE = sweph.SE_ECL_1ST_VISIBLE;
+    pub const SE_ECL_PARTBEG_VISIBLE = sweph.SE_ECL_PARTBEG_VISIBLE;
+    pub const SE_ECL_2ND_VISIBLE = sweph.SE_ECL_2ND_VISIBLE;
+    pub const SE_ECL_TOTBEG_VISIBLE = sweph.SE_ECL_TOTBEG_VISIBLE;
+    pub const SE_ECL_3RD_VISIBLE = sweph.SE_ECL_3RD_VISIBLE;
+    pub const SE_ECL_TOTEND_VISIBLE = sweph.SE_ECL_TOTEND_VISIBLE;
+    pub const SE_ECL_4TH_VISIBLE = sweph.SE_ECL_4TH_VISIBLE;
+    pub const SE_ECL_PARTEND_VISIBLE = sweph.SE_ECL_PARTEND_VISIBLE;
+    pub const SE_ECL_PENUMBBEG_VISIBLE = sweph.SE_ECL_PENUMBBEG_VISIBLE;
+    pub const SE_ECL_PENUMBEND_VISIBLE = sweph.SE_ECL_PENUMBEND_VISIBLE;
+    pub const SE_ECL_OCC_BEG_DAYLIGHT = sweph.SE_ECL_OCC_BEG_DAYLIGHT;
+    pub const SE_ECL_OCC_END_DAYLIGHT = sweph.SE_ECL_OCC_END_DAYLIGHT;
+    pub const SE_ECL_ONE_TRY = sweph.SE_ECL_ONE_TRY;
+    pub const SE_CALC_RISE = sweph.SE_CALC_RISE;
+    pub const SE_CALC_SET = sweph.SE_CALC_SET;
+    pub const SE_CALC_MTRANSIT = sweph.SE_CALC_MTRANSIT;
+    pub const SE_CALC_ITRANSIT = sweph.SE_CALC_ITRANSIT;
+    pub const SE_BIT_DISC_CENTER = sweph.SE_BIT_DISC_CENTER;
+    pub const SE_BIT_DISC_BOTTOM = sweph.SE_BIT_DISC_BOTTOM;
+    pub const SE_BIT_GEOCTR_NO_ECL_LAT = sweph.SE_BIT_GEOCTR_NO_ECL_LAT;
+    pub const SE_BIT_NO_REFRACTION = sweph.SE_BIT_NO_REFRACTION;
+    pub const SE_BIT_CIVIL_TWILIGHT = sweph.SE_BIT_CIVIL_TWILIGHT;
+    pub const SE_BIT_NAUTIC_TWILIGHT = sweph.SE_BIT_NAUTIC_TWILIGHT;
+    pub const SE_BIT_ASTRO_TWILIGHT = sweph.SE_BIT_ASTRO_TWILIGHT;
+    pub const SE_BIT_FIXED_DISC_SIZE = sweph.SE_BIT_FIXED_DISC_SIZE;
+    pub const SE_BIT_FORCE_SLOW_METHOD = sweph.SE_BIT_FORCE_SLOW_METHOD;
+    pub const SE_BIT_HINDU_RISING = sweph.SE_BIT_HINDU_RISING;
+
+    pub const SE_ECL2HOR = sweph.SE_ECL2HOR;
+    pub const SE_EQU2HOR = sweph.SE_EQU2HOR;
+    pub const SE_HOR2ECL = sweph.SE_HOR2ECL;
+    pub const SE_HOR2EQU = sweph.SE_HOR2EQU;
+
+    pub const SE_TRUE_TO_APP = sweph.SE_TRUE_TO_APP;
+    pub const SE_APP_TO_TRUE = sweph.SE_APP_TO_TRUE;
+
+    pub const SE_DE_NUMBER = sweph.SE_DE_NUMBER;
+    pub const SE_FNAME_DE200 = sweph.SE_FNAME_DE200;
+    pub const SE_FNAME_DE403 = sweph.SE_FNAME_DE403;
+    pub const SE_FNAME_DE404 = sweph.SE_FNAME_DE404;
+    pub const SE_FNAME_DE405 = sweph.SE_FNAME_DE405;
+    pub const SE_FNAME_DE406 = sweph.SE_FNAME_DE406;
+    pub const SE_FNAME_DE431 = sweph.SE_FNAME_DE431;
+    pub const SE_FNAME_DFT = sweph.SE_FNAME_DFT;
+    pub const SE_FNAME_DFT2 = sweph.SE_FNAME_DFT2;
+    pub const SE_STARFILE_OLD = sweph.SE_STARFILE_OLD;
+    pub const SE_STARFILE = sweph.SE_STARFILE;
+    pub const SE_ASTNAMFILE = sweph.SE_ASTNAMFILE;
+    pub const SE_FICTFILE = sweph.SE_FICTFILE;
+
+    pub const SE_HELIACAL_RISING = sweph.SE_HELIACAL_RISING;
+    pub const SE_HELIACAL_SETTING = sweph.SE_HELIACAL_SETTING;
+    pub const SE_MORNING_FIRST = sweph.SE_MORNING_FIRST;
+    pub const SE_EVENING_LAST = sweph.SE_EVENING_LAST;
+    pub const SE_EVENING_FIRST = sweph.SE_EVENING_FIRST;
+    pub const SE_MORNING_LAST = sweph.SE_MORNING_LAST;
+    pub const SE_ACRONYCHAL_RISING = sweph.SE_ACRONYCHAL_RISING;
+    pub const SE_ACRONYCHAL_SETTING = sweph.SE_ACRONYCHAL_SETTING;
+    pub const SE_COSMICAL_SETTING = sweph.SE_COSMICAL_SETTING;
+
+    pub const SE_HELFLAG_LONG_SEARCH = sweph.SE_HELFLAG_LONG_SEARCH;
+    pub const SE_HELFLAG_HIGH_PRECISION = sweph.SE_HELFLAG_HIGH_PRECISION;
+    pub const SE_HELFLAG_OPTICAL_PARAMS = sweph.SE_HELFLAG_OPTICAL_PARAMS;
+    pub const SE_HELFLAG_NO_DETAILS = sweph.SE_HELFLAG_NO_DETAILS;
+    pub const SE_HELFLAG_SEARCH_1_PERIOD = sweph.SE_HELFLAG_SEARCH_1_PERIOD;
+    pub const SE_HELFLAG_VISLIM_DARK = sweph.SE_HELFLAG_VISLIM_DARK;
+    pub const SE_HELFLAG_VISLIM_NOMOON = sweph.SE_HELFLAG_VISLIM_NOMOON;
+    pub const SE_HELFLAG_VISLIM_PHOTOPIC = sweph.SE_HELFLAG_VISLIM_PHOTOPIC;
+    pub const SE_HELFLAG_VISLIM_SCOTOPIC = sweph.SE_HELFLAG_VISLIM_SCOTOPIC;
+    pub const SE_HELFLAG_AV = sweph.SE_HELFLAG_AV;
+    pub const SE_HELFLAG_AVKIND_VR = sweph.SE_HELFLAG_AVKIND_VR;
+    pub const SE_HELFLAG_AVKIND_PTO = sweph.SE_HELFLAG_AVKIND_PTO;
+    pub const SE_HELFLAG_AVKIND_MIN7 = sweph.SE_HELFLAG_AVKIND_MIN7;
+    pub const SE_HELFLAG_AVKIND_MIN9 = sweph.SE_HELFLAG_AVKIND_MIN9;
+    pub const SE_HELFLAG_AVKIND = sweph.SE_HELFLAG_AVKIND;
+    pub const TJD_INVALID = sweph.TJD_INVALID;
+    pub const SIMULATE_VICTORVB = sweph.SIMULATE_VICTORVB;
 };
