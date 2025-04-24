@@ -4,6 +4,13 @@ const sweph = @cImport({
     @cInclude("swephexp.h");
 });
 
+pub fn Result(comptime T: type) T {
+    return union(enum) {
+        ok: T,
+        err: []u8,
+    };
+}
+
 pub const CalcOut = struct {
     lon: f64,
     lat: f64,
@@ -15,6 +22,7 @@ pub const CalcOut = struct {
 
 const SweErr = error{
     Generic,
+    CalculationFailure,
 };
 
 const ErrCtx = struct {
@@ -37,7 +45,7 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, serr: ?*[256]u8) SweErr!CalcOut {
         if (serr) |s| {
             @memcpy(s, &err_str);
         }
-        return SweErr.Generic;
+        return SweErr.CalculationFailure;
     }
 
     return CalcOut{
@@ -48,6 +56,46 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, serr: ?*[256]u8) SweErr!CalcOut {
         .lat_speed = xxret[4],
         .distance_speed = xxret[5],
     };
+}
+
+test "calc" {
+    const jd: f64 = 2449090.1145833;
+    var err_msg: [256]u8 = undefined;
+    @memset(&err_msg, 0);
+
+    const expected = CalcOut{
+        .lon = 2.2698890549720918e1,
+        .lat = -5.814780752652264e-5,
+        .distance = 1.002606604292459e0,
+        .lon_speed = 9.802818327862651e-1,
+        .lat_speed = 3.383381103227023e-5,
+        .distance_speed = 2.891951191646063e-4,
+    };
+
+    var eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &err_msg);
+    try std.testing.expect(strlen(&err_msg) == 0);
+    try std.testing.expectEqual(expected, eph);
+
+    // Without passing err_msg
+    eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, undefined);
+    try std.testing.expect(strlen(&err_msg) == 0);
+    try std.testing.expectEqual(expected, eph);
+
+    // Run with invalid jd
+    _ = calc(-1, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &err_msg) catch {
+        try std.testing.expect(strlen(&err_msg) > 0);
+    };
+}
+
+fn strlen(str: []u8) usize {
+    var size: usize = 0;
+    for (str) |char| {
+        if (char == 0) {
+            return size;
+        }
+        size += 1;
+    }
+    return size;
 }
 
 pub const HeliacalUtOut = struct {

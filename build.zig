@@ -4,8 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const swisseph_dir = b.option([]const u8, "swisseph_dir", "Path to swisseph directory") orelse "swisseph";
-
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -20,17 +18,19 @@ pub fn build(b: *std.Build) void {
         .name = "swisseph_zig",
         .root_module = lib_mod,
     });
+    const swisseph_dir = b.option([]const u8, "swisseph_dir", "Path to swisseph directory") orelse "swisseph";
+    const swisseph_lib_path = b.pathJoin(&.{ swisseph_dir, "libswe.a" });
 
     lib.addIncludePath(b.path(swisseph_dir));
-
-    const lib_path = b.pathJoin(&.{ swisseph_dir, "libswe.a" });
-    lib.addObjectFile(b.path(lib_path));
+    lib.addObjectFile(b.path(swisseph_lib_path));
 
     b.installArtifact(lib);
 
     const lib_unit_tests = b.addTest(.{
         .root_module = lib_mod,
     });
+    lib_unit_tests.addIncludePath(b.path(swisseph_dir));
+    lib_unit_tests.addObjectFile(b.path(swisseph_lib_path));
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
