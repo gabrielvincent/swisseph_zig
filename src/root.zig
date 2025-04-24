@@ -155,6 +155,264 @@ test "heliacalUt" {
     try std.testing.expectEqual(expected, hel);
 }
 
+const HeliacalPhenoUtOut = struct {
+    alt_obj: f64,
+    app_alt_obj: f64,
+    geo_alt_obj: f64,
+    azi_obj: f64,
+    alt_sun: f64,
+    azi_sun: f64,
+    tav_act: f64,
+    arcv_act: f64,
+    daz_act: f64,
+    arcl_act: f64,
+    k_act: f64,
+    min_tav: f64,
+    t_first_vr: f64,
+    t_b_vr: f64,
+    t_last_vr: f64,
+    t_b_yallop: f64,
+    w_moon: f64,
+    q_yal: f64,
+    q_crit: f64,
+    par_obj: f64,
+    magn_obj: f64,
+    rise_obj: f64,
+    rise_sun: f64,
+    lag: f64,
+    tvis_vr: f64,
+    l_moon: f64,
+};
+
+pub fn heliacalPhenoUt(
+    jd_start: f64,
+    geo: [3]f64, // longitude, latitude, altitude
+    atm: [4]f64, // pressure, temperature, humidity, etc.
+    obs: [6]f64, // observer parameters
+    object_name: []const u8,
+    event_type: i32,
+    helflag: i32,
+    diags: ?*Diagnostics,
+) SweErr!HeliacalPhenoUtOut {
+    var dret: [50]f64 = undefined; // Array to store results
+    var err_str: [256]u8 = undefined;
+
+    var obj_name_buf: [256]u8 = undefined;
+    @memcpy(obj_name_buf[0..object_name.len], object_name);
+    obj_name_buf[object_name.len] = 0;
+    const c_object_name = &obj_name_buf;
+
+    const ret_flag = sweph.swe_heliacal_pheno_ut(
+        jd_start,
+        @constCast(&geo),
+        @constCast(&atm),
+        @constCast(&obs),
+        c_object_name,
+        event_type,
+        helflag,
+        &dret,
+        &err_str,
+    );
+
+    if (ret_flag < 0) {
+        if (diags) |d| {
+            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return HeliacalPhenoUtOut{
+        .alt_obj = dret[0],
+        .app_alt_obj = dret[1],
+        .geo_alt_obj = dret[2],
+        .azi_obj = dret[3],
+        .alt_sun = dret[4],
+        .azi_sun = dret[5],
+        .tav_act = dret[6],
+        .arcv_act = dret[7],
+        .daz_act = dret[8],
+        .arcl_act = dret[9],
+        .k_act = dret[10],
+        .min_tav = dret[11],
+        .t_first_vr = dret[12],
+        .t_b_vr = dret[13],
+        .t_last_vr = dret[14],
+        .t_b_yallop = dret[15],
+        .w_moon = dret[16],
+        .q_yal = dret[17],
+        .q_crit = dret[18],
+        .par_obj = dret[19],
+        .magn_obj = dret[20],
+        .rise_obj = dret[21],
+        .rise_sun = dret[22],
+        .lag = dret[23],
+        .tvis_vr = dret[24],
+        .l_moon = dret[25],
+    };
+}
+
+test "heliacalPhenoUt" {
+    setEphePath("ephe");
+
+    const jd: f64 = 2449090.1145833;
+    const geo: [3]f64 = .{ 0, 0, 0 };
+    const atm: [4]f64 = .{ 0, 0, 0, 0 };
+    const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
+    var diags = Diagnostics{};
+    const hel = try heliacalPhenoUt(
+        jd,
+        geo,
+        atm,
+        obs,
+        "mars",
+        sweph.SE_HELIACAL_RISING,
+        sweph.SE_HELFLAG_HIGH_PRECISION,
+        &diags,
+    );
+
+    const expected = HeliacalPhenoUtOut{
+        .alt_obj = 3.322064816559828e1,
+        .app_alt_obj = 3.324500295804901e1,
+        .geo_alt_obj = 3.322223525931041e1,
+        .azi_obj = 6.1251302960950966e1,
+        .alt_sun = 4.8157630323795594e1,
+        .azi_sun = 2.8330401018728065e2,
+        .tav_act = -1.4936982158197317e1,
+        .arcv_act = -1.4935395064485185e1,
+        .daz_act = 2.220527072263297e2,
+        .arcl_act = 1.3584386571887987e2,
+        .k_act = 3.310282416045371e-1,
+        .min_tav = 0e0,
+        .t_first_vr = 2.44909001087977e6,
+        .t_b_vr = 9.9999999e7,
+        .t_last_vr = 9.9999999e7,
+        .t_b_yallop = 9.9999999e7,
+        .w_moon = 0e0,
+        .q_yal = 0e0,
+        .q_crit = 0e0,
+        .par_obj = 1.5870937121320594e-3,
+        .magn_obj = 7.754093864325826e-1,
+        .rise_obj = 2.44909001087977e6,
+        .rise_sun = 2.449090748776619e6,
+        .lag = -7.378968489356339e-1,
+        .tvis_vr = 9.9999999e7,
+        .l_moon = 0e0,
+    };
+    try std.testing.expectEqual(expected, hel);
+}
+
+const Visibility = enum {
+    BelowHorizon,
+    PhotopicVision,
+    ScotopicVision,
+    NearLimit,
+};
+
+const VisLimitMagOut = struct {
+    lim_visual_magnitude: f64,
+    alt_obj: f64,
+    azi_obj: f64,
+    alt_sun: f64,
+    azi_sun: f64,
+    alt_moon: f64,
+    azi_moon: f64,
+    magn_obj: f64,
+    visibility: Visibility,
+};
+
+pub fn visLimitMag(
+    tjdut: f64,
+    geo: [3]f64, // longitude, latitude, altitude
+    atm: [4]f64, // pressure, temperature, humidity, etc.
+    obs: [6]f64, // observer parameters
+    object_name: []const u8,
+    event_type: i32,
+    helflag: i32,
+    diags: ?*Diagnostics,
+) SweErr!VisLimitMagOut {
+    var darr: [8]f64 = undefined; // Array to store results
+    var err_str: [256]u8 = undefined;
+
+    var obj_name_buf: [256]u8 = undefined;
+    @memcpy(obj_name_buf[0..object_name.len], object_name);
+    obj_name_buf[object_name.len] = 0;
+    const c_object_name = &obj_name_buf;
+
+    const ret_flag = sweph.swe_heliacal_pheno_ut(
+        tjdut,
+        @constCast(&geo),
+        @constCast(&atm),
+        @constCast(&obs),
+        c_object_name,
+        event_type,
+        helflag,
+        &darr,
+        &err_str,
+    );
+
+    if (ret_flag == -1) {
+        if (diags) |d| {
+            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+        }
+        return SweErr.CalcFailure;
+    }
+
+    var visibility: Visibility = .BelowHorizon;
+    if (ret_flag == 0) {
+        visibility = .PhotopicVision;
+    } else {
+        if ((ret_flag & 1) != 0) {
+            visibility = .ScotopicVision;
+        } else if ((ret_flag & 2) != 0) {
+            visibility = .NearLimit;
+        }
+    }
+
+    return VisLimitMagOut{
+        .lim_visual_magnitude = darr[0],
+        .alt_obj = darr[1],
+        .azi_obj = darr[2],
+        .alt_sun = darr[3],
+        .azi_sun = darr[4],
+        .alt_moon = darr[5],
+        .azi_moon = darr[6],
+        .magn_obj = darr[7],
+        .visibility = visibility,
+    };
+}
+
+test "vis_limit_mag" {
+    const jd: f64 = 2449090.1145833;
+    const geo: [3]f64 = .{ 0, 100, 0 };
+    const atm: [4]f64 = .{ 0, 0, 0, 0 };
+    const obs: [6]f64 = .{ 0, 0, 1000, 30, 0, 0 };
+    var diags = Diagnostics{};
+    const limMag = try visLimitMag(
+        jd,
+        geo,
+        atm,
+        obs,
+        "mars",
+        sweph.SE_HELIACAL_RISING,
+        sweph.SE_HELFLAG_HIGH_PRECISION,
+        &diags,
+    );
+
+    const expected = VisLimitMagOut{
+        .lim_visual_magnitude = 1.7522145145859408e1,
+        .alt_obj = 1.7572461868203337e1,
+        .azi_obj = 1.7523896634243343e1,
+        .alt_sun = 1.2972415588934848e2,
+        .azi_sun = 1.246872582204149e0,
+        .alt_moon = 2.2049002826986566e2,
+        .azi_moon = 1.627527256365526e1,
+        .magn_obj = 1.6277024052039195e1,
+        .visibility = .PhotopicVision,
+    };
+
+    try std.testing.expectEqual(expected, limMag);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
