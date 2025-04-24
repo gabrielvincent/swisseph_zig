@@ -4,11 +4,19 @@ const sweph = @cImport({
     @cInclude("swephexp.h");
 });
 
-pub fn Result(comptime T: type) T {
-    return union(enum) {
-        ok: T,
-        err: []u8,
-    };
+const SweErr = error{
+    Unknown,
+    CalcFailure,
+};
+
+const Diagnostics = struct {
+    err: []u8 = "",
+};
+
+fn copyCStr(msg: []const u8) []u8 {
+    const err_copy = std.heap.page_allocator.alloc(u8, msg.len) catch unreachable;
+    @memcpy(err_copy.ptr, msg);
+    return err_copy;
 }
 
 pub const CalcOut = struct {
@@ -20,32 +28,17 @@ pub const CalcOut = struct {
     distance_speed: f64,
 };
 
-const SweErr = error{
-    Generic,
-    CalculationFailure,
-};
-
-const ErrCtx = struct {
-    err: anyerror,
-    msg: []const u8,
-
-    fn create(err: anyerror, msg: []const u8) ErrCtx {
-        return .{ .err = err, .msg = msg };
-    }
-};
-
-pub fn calc(jd: f64, ipl: i32, iflag: i32, serr: ?*[256]u8) SweErr!CalcOut {
+pub fn calc(jd: f64, ipl: i32, iflag: i32, diagn: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
     var err_str: [256]u8 = undefined;
-    @memset(&err_str, 0);
 
     const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_str);
 
     if (ret_flag < 0) {
-        if (serr) |s| {
-            @memcpy(s, &err_str);
+        if (diagn) |d| {
+            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
         }
-        return SweErr.CalculationFailure;
+        return SweErr.CalcFailure;
     }
 
     return CalcOut{
@@ -58,52 +51,37 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, serr: ?*[256]u8) SweErr!CalcOut {
     };
 }
 
-test "calc" {
+test "calc returns ephemeris" {
+    setEphePath("ephe");
+
     const jd: f64 = 2449090.1145833;
-    var err_msg: [256]u8 = undefined;
-    @memset(&err_msg, 0);
-
+    var diags = Diagnostics{};
+    const eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
     const expected = CalcOut{
-        .lon = 2.2698890549720918e1,
-        .lat = -5.814780752652264e-5,
-        .distance = 1.002606604292459e0,
-        .lon_speed = 9.802818327862651e-1,
-        .lat_speed = 3.383381103227023e-5,
-        .distance_speed = 2.891951191646063e-4,
+        .lon = 2.2698886768788533e1,
+        .lat = -5.68713730562752e-5,
+        .distance = 1.0026066384950405e0,
+        .lon_speed = 9.802836638802254e-1,
+        .lat_speed = 3.3018284460201747e-5,
+        .distance_speed = 2.891872861964314e-4,
     };
-
-    var eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &err_msg);
-    try std.testing.expect(strlen(&err_msg) == 0);
     try std.testing.expectEqual(expected, eph);
-
-    // Without passing err_msg
-    eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, undefined);
-    try std.testing.expect(strlen(&err_msg) == 0);
-    try std.testing.expectEqual(expected, eph);
-
-    // Run with invalid jd
-    _ = calc(-1, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &err_msg) catch {
-        try std.testing.expect(strlen(&err_msg) > 0);
-    };
 }
 
-fn strlen(str: []u8) usize {
-    var size: usize = 0;
-    for (str) |char| {
-        if (char == 0) {
-            return size;
-        }
-        size += 1;
-    }
-    return size;
+test "calc with an invalid ipl returns error" {
+    const jd: f64 = 2449090.1145833;
+    var diagn: Diagnostics = undefined;
+    const INVALID_PLANET: i32 = -42069;
+    _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diagn) catch {
+        const expected = "illegal planet number -42069.";
+        try std.testing.expectEqualStrings(expected, diagn.err);
+    };
 }
 
 pub const HeliacalUtOut = struct {
     visibility_start_jd: f64,
-    // Other output values from dret array
     visibility_optimum_jd: f64,
     visibility_end_jd: f64,
-    // Additional fields as needed based on dret array
 };
 
 pub fn heliacalUt(
@@ -114,11 +92,10 @@ pub fn heliacalUt(
     object_name: []const u8,
     event_type: i32,
     helflag: i32,
-    serr: ?*[256]u8,
+    diags: ?*Diagnostics,
 ) SweErr!HeliacalUtOut {
     var dret: [50]f64 = undefined; // Array to store results
     var err_str: [256]u8 = undefined;
-    @memset(&err_str, 0);
 
     var obj_name_buf: [256]u8 = undefined;
     @memcpy(obj_name_buf[0..object_name.len], object_name);
@@ -138,18 +115,44 @@ pub fn heliacalUt(
     );
 
     if (ret_val < 0) {
-        if (serr) |s| {
-            @memcpy(s, &err_str);
+        if (diags) |d| {
+            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
         }
-        return SweErr.Generic;
+        return SweErr.CalcFailure;
     }
 
     return HeliacalUtOut{
         .visibility_start_jd = dret[0],
         .visibility_optimum_jd = dret[1],
         .visibility_end_jd = dret[2],
-        // Add more fields from dret as needed
     };
+}
+
+test "heliacalUt" {
+    setEphePath("ephe");
+
+    const jd: f64 = 2449090.1145833;
+    const geo: [3]f64 = .{ 0, 0, 0 };
+    const atm: [4]f64 = .{ 0, 0, 0, 0 };
+    const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
+    var diags = Diagnostics{};
+    const hel = try heliacalUt(
+        jd,
+        geo,
+        atm,
+        obs,
+        "mars",
+        sweph.SE_HELIACAL_RISING,
+        sweph.SE_HELFLAG_HIGH_PRECISION,
+        &diags,
+    );
+
+    const expected = HeliacalUtOut{
+        .visibility_start_jd = 2.4494357236005506e6,
+        .visibility_optimum_jd = 2.449435725961661e6,
+        .visibility_end_jd = 2.449435727176938e6,
+    };
+    try std.testing.expectEqual(expected, hel);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
