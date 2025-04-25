@@ -82,11 +82,11 @@ test "calc returns ephemeris" {
 
 test "calc with an invalid ipl returns error" {
     const jd: f64 = 2449090.1145833;
-    var diagn: Diagnostics = undefined;
+    var diags: Diagnostics = undefined;
     const INVALID_PLANET: i32 = -42069;
-    _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diagn) catch {
+    _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch {
         const expected = "illegal planet number -42069.";
-        try std.testing.expectEqualStrings(expected, diagn.err);
+        try std.testing.expectEqualStrings(expected, diags.err);
     };
 }
 
@@ -491,8 +491,8 @@ test "heliacalAngle" {
         alt_moon,
         &diags,
     );
-
-    std.debug.print("angle: {d}", .{angle});
+    const expected: f64 = 2.9;
+    try std.testing.expectApproxEqAbs(expected, angle, 0.1);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
