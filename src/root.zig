@@ -4,19 +4,30 @@ const sweph = @cImport({
     @cInclude("swephexp.h");
 });
 
+const SweRetFlag = enum(i32) {
+    BEYOND_EPH_LIMITS = -3,
+    NOT_AVAILABLE = -2,
+    ERR = -1,
+    OK = 0,
+};
+
 const SweErr = error{
     Unknown,
     CalcFailure,
 };
 
 const Diagnostics = struct {
-    err: []u8 = "",
+    err: []const u8,
 };
 
-fn copyCStr(msg: []const u8) []u8 {
-    const err_copy = std.heap.page_allocator.alloc(u8, msg.len) catch unreachable;
-    @memcpy(err_copy.ptr, msg);
-    return err_copy;
+/// Converts a fixed-size, null-terminated string buffer to a heap-allocated string slice
+/// that can be safely stored and used after the original buffer is out of scope.
+/// Caller owns the returned memory and is responsible for freeing it.
+fn copyNullTerminatedStr(buffer: []const u8) []const u8 {
+    const err_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
+    const allocated = std.heap.page_allocator.alloc(u8, err_len) catch unreachable;
+    @memcpy(allocated.ptr, buffer);
+    return allocated;
 }
 
 pub const CalcOut = struct {
@@ -30,13 +41,14 @@ pub const CalcOut = struct {
 
 pub fn calc(jd: f64, ipl: i32, iflag: i32, diagn: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
-    var err_str: [256]u8 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    @memset(&err_buf, 0);
 
-    const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_str);
+    const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_buf);
 
     if (ret_flag < 0) {
         if (diagn) |d| {
-            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+            d.err = copyNullTerminatedStr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -55,7 +67,7 @@ test "calc returns ephemeris" {
     setEphePath("ephe");
 
     const jd: f64 = 2449090.1145833;
-    var diags = Diagnostics{};
+    var diags: Diagnostics = undefined;
     const eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
     const expected = CalcOut{
         .lon = 2.2698886768788533e1,
@@ -95,7 +107,7 @@ pub fn heliacalUt(
     diags: ?*Diagnostics,
 ) SweErr!HeliacalUtOut {
     var dret: [50]f64 = undefined; // Array to store results
-    var err_str: [256]u8 = undefined;
+    var err_buf: [256:0]u8 = undefined;
 
     var obj_name_buf: [256]u8 = undefined;
     @memcpy(obj_name_buf[0..object_name.len], object_name);
@@ -111,12 +123,12 @@ pub fn heliacalUt(
         event_type,
         helflag,
         &dret,
-        &err_str,
+        &err_buf,
     );
 
     if (ret_val < 0) {
         if (diags) |d| {
-            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+            d.err = copyNullTerminatedStr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -135,7 +147,7 @@ test "heliacalUt" {
     const geo: [3]f64 = .{ 0, 0, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
-    var diags = Diagnostics{};
+    var diags: Diagnostics = undefined;
     const hel = try heliacalUt(
         jd,
         geo,
@@ -195,7 +207,7 @@ pub fn heliacalPhenoUt(
     diags: ?*Diagnostics,
 ) SweErr!HeliacalPhenoUtOut {
     var dret: [50]f64 = undefined; // Array to store results
-    var err_str: [256]u8 = undefined;
+    var err_buf: [256:0]u8 = undefined;
 
     var obj_name_buf: [256]u8 = undefined;
     @memcpy(obj_name_buf[0..object_name.len], object_name);
@@ -211,12 +223,12 @@ pub fn heliacalPhenoUt(
         event_type,
         helflag,
         &dret,
-        &err_str,
+        &err_buf,
     );
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+            d.err = copyNullTerminatedStr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -258,7 +270,7 @@ test "heliacalPhenoUt" {
     const geo: [3]f64 = .{ 0, 0, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
-    var diags = Diagnostics{};
+    var diags: Diagnostics = undefined;
     const hel = try heliacalPhenoUt(
         jd,
         geo,
@@ -331,7 +343,7 @@ pub fn visLimitMag(
     diags: ?*Diagnostics,
 ) SweErr!VisLimitMagOut {
     var darr: [8]f64 = undefined; // Array to store results
-    var err_str: [256]u8 = undefined;
+    var err_buf: [256:0]u8 = undefined;
 
     var obj_name_buf: [256]u8 = undefined;
     @memcpy(obj_name_buf[0..object_name.len], object_name);
@@ -347,12 +359,12 @@ pub fn visLimitMag(
         event_type,
         helflag,
         &darr,
-        &err_str,
+        &err_buf,
     );
 
-    if (ret_flag == -1) {
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            d.err = copyCStr(std.mem.sliceTo(&err_str, 0));
+            d.err = copyNullTerminatedStr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -386,7 +398,7 @@ test "vis_limit_mag" {
     const geo: [3]f64 = .{ 0, 100, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 1000, 30, 0, 0 };
-    var diags = Diagnostics{};
+    var diags: Diagnostics = undefined;
     const limMag = try visLimitMag(
         jd,
         geo,
@@ -411,6 +423,76 @@ test "vis_limit_mag" {
     };
 
     try std.testing.expectEqual(expected, limMag);
+}
+
+pub fn heliacalAngle(
+    tjdut: f64,
+    geo: [3]f64, // longitude, latitude, altitude
+    atm: [4]f64, // pressure, temperature, humidity, etc.
+    obs: [6]f64, // observer parameters
+    helflag: i32,
+    mag: f64,
+    azi_obj: f64,
+    azi_sun: f64,
+    azi_moon: f64,
+    alt_moon: f64,
+    diags: ?*Diagnostics,
+) SweErr!f64 {
+    var angle: f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+
+    const ret_flag = sweph.swe_heliacal_angle(
+        tjdut,
+        @constCast(&geo),
+        @constCast(&atm),
+        @constCast(&obs),
+        helflag,
+        mag,
+        azi_obj,
+        azi_sun,
+        azi_moon,
+        alt_moon,
+        &angle,
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            d.err = copyNullTerminatedStr(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return angle;
+}
+
+test "heliacalAngle" {
+    const jd: f64 = 2449090.1145833;
+    const geo: [3]f64 = .{ 0, 100, 0 };
+    const atm: [4]f64 = .{ 0, 0, 0, 0 };
+    const obs: [6]f64 = .{ 0, 0, 1000, 30, 0, 0 };
+    const mag: f64 = 0.0;
+    const azi_obj: f64 = 0.0;
+    const azi_sun: f64 = 0.0;
+    const azi_moon: f64 = 0.0;
+    const alt_moon: f64 = 0.0;
+
+    var diags: Diagnostics = undefined;
+    const angle = try heliacalAngle(
+        jd,
+        geo,
+        atm,
+        obs,
+        sweph.SE_HELFLAG_HIGH_PRECISION,
+        mag,
+        azi_obj,
+        azi_sun,
+        azi_moon,
+        alt_moon,
+        &diags,
+    );
+
+    std.debug.print("angle: {d}", .{angle});
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
