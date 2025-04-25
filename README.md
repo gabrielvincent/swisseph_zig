@@ -78,7 +78,7 @@ const sweph = @import("swisseph_zig");
 pub fn main() !void {
     const jd: f64 = 2449090.1145833;
     var diags: Diagnostics = undefined;
-    const eph = calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch |err| {
+    const eph = sweph.calc(jd, sweph.defs.SE_SUN, sweph.defs.SEFLG_SPEED | sweph.defs.SEFLG_JPLEPH, &diags) catch |err| {
         std.debug.print("calculation failed ({}). error message: {s}\n", .{err}, .{diags.err});
     };
 }
