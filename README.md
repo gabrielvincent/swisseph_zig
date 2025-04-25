@@ -76,13 +76,10 @@ const std = @import("std");
 const sweph = @import("swisseph_zig");
 
 pub fn main() !void {
-    const julday: f64 = 2459000.5; // Example Julian day
-    const eph = sweph.swe_calc_ut(julday, .SUN, .JPLEPH) catch |err| {
-        std.debug.print("Failed to get ephemeris: {}", .{err});
-        return;
+    const jd: f64 = 2449090.1145833;
+    var diags: Diagnostics = undefined;
+    const eph = calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch |err| {
+        std.debug.print("calculation failed ({}). error message: {s}\n", .{err}, .{diags.err});
     };
-
-    std.debug.print("Sun position: {d:.6}\n", .{eph.lon});
-    std.debug.print("Sun speed: {d:.6}\n", .{eph.lon_speed});
 }
 ```
