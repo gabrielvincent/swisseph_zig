@@ -599,7 +599,6 @@ pub const CalcOut = struct {
 pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    @memset(&err_buf, 0);
 
     const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_buf);
 
@@ -652,7 +651,6 @@ test "calc with an invalid ipl returns error" {
 pub fn calcUt(tjd_ut: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    @memset(&err_buf, 0);
 
     const ret_flag = sweph.swe_calc_ut(tjd_ut, ipl, iflag, &xxret, &err_buf);
 
@@ -731,6 +729,44 @@ test "calcPctr" {
         .distance_speed = 2.891912115442801e-4,
     };
     try std.testing.expectEqual(expected, eph);
+}
+
+pub fn solcross(x2cross: f64, jd_et: f64, flag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_solcross(x2cross, jd_et, flag, &err_buf);
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_solcross` for more info in sweph.c
+    if (jd < jd_et) {
+        if (diags) |d| {
+            std.debug.print("will set: {s}\n", .{err_buf});
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "solcross returns a julian day" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try solcross(lon, start_jd, sweph.SEFLG_TRUEPOS, &diags);
+
+    try testing.expect(jd > start_jd);
+}
+
+test "solcross successfully fails" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 700;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    _ = solcross(lon, start_jd, sweph.SEFLG_NONUT, &diags) catch |err| {
+        try testing.expect(err == SweErr.CalcFailure);
+    };
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
@@ -1005,4 +1041,6 @@ pub const defs = struct {
     pub const SE_HELFLAG_AVKIND = sweph.SE_HELFLAG_AVKIND;
     pub const TJD_INVALID = sweph.TJD_INVALID;
     pub const SIMULATE_VICTORVB = sweph.SIMULATE_VICTORVB;
+
+    pub const CROSS_PRECISION = (1 / 3600000.0); // one milliarc sec
 };
