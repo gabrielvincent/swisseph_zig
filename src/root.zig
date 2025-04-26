@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const utils = @import("utils.zig");
 const sweph = @cImport({
     // Include the swisseph header
     @cInclude("swephexp.h");
@@ -596,6 +597,39 @@ test "topoArcusVisionis" {
     );
     const expected: f64 = 9.9e1;
     try std.testing.expectApproxEqAbs(expected, angle, 0.1);
+}
+
+pub fn version(allocator: Allocator) ![]const u8 {
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    _ = sweph.swe_version(&buf);
+
+    const str_len = std.mem.indexOfScalar(u8, &buf, 0) orelse buf.len;
+    const copy = try allocator.alloc(u8, str_len);
+    @memcpy(copy.ptr, buf[0..str_len]);
+
+    return copy;
+}
+
+test "version" {
+    const v = try version(testing.allocator);
+    defer testing.allocator.free(v);
+    try testing.expect(v.len > 0);
+
+    const parts = try utils.split(testing.allocator, v, ".");
+    defer parts.deinit();
+
+    try testing.expect(parts.items.len > 0);
+
+    var partsNum = try std.ArrayList(i32).initCapacity(testing.allocator, parts.items.len);
+    defer partsNum.deinit();
+
+    for (parts.items) |part| {
+        const partNum = try std.fmt.parseInt(i32, part, 10);
+        try partsNum.append(partNum);
+    }
+
+    try testing.expect(partsNum.items.len > 0);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
