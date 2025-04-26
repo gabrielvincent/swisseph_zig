@@ -53,68 +53,6 @@ pub const Diagnostics = struct {
     }
 };
 
-pub const CalcOut = struct {
-    lon: f64,
-    lat: f64,
-    distance: f64,
-    lon_speed: f64,
-    lat_speed: f64,
-    distance_speed: f64,
-};
-
-pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
-    var xxret: [6]f64 = undefined;
-    var err_buf: [256:0]u8 = undefined;
-    @memset(&err_buf, 0);
-
-    const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_buf);
-
-    if (ret_flag < 0) {
-        if (diags) |d| {
-            try d.setErrMsg(&err_buf);
-        }
-        return SweErr.CalcFailure;
-    }
-
-    return CalcOut{
-        .lon = xxret[0],
-        .lat = xxret[1],
-        .distance = xxret[2],
-        .lon_speed = xxret[3],
-        .lat_speed = xxret[4],
-        .distance_speed = xxret[5],
-    };
-}
-
-test "calc returns ephemeris" {
-    setEphePath("ephe");
-
-    const jd: f64 = 2449090.1145833;
-    var diags = Diagnostics.init(testing.allocator);
-    defer diags.deinit();
-    const eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
-    const expected = CalcOut{
-        .lon = 2.2698886768788533e1,
-        .lat = -5.68713730562752e-5,
-        .distance = 1.0026066384950405e0,
-        .lon_speed = 9.802836638802254e-1,
-        .lat_speed = 3.3018284460201747e-5,
-        .distance_speed = 2.891872861964314e-4,
-    };
-    try std.testing.expectEqual(expected, eph);
-}
-
-test "calc with an invalid ipl returns error" {
-    const jd: f64 = 2449090.1145833;
-    var diags = Diagnostics.init(testing.allocator);
-    defer diags.deinit();
-    const INVALID_PLANET: i32 = -42069;
-    _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch {
-        const expected = "illegal planet number -42069.";
-        try std.testing.expectEqualStrings(expected, diags.errMsg());
-    };
-}
-
 pub const HeliacalUtOut = struct {
     visibility_start_jd: f64,
     visibility_optimum_jd: f64,
@@ -647,6 +585,152 @@ test "getLibraryPath" {
     const libPath = try getLibraryPath(testing.allocator);
     defer testing.allocator.free(libPath);
     try testing.expect(libPath.len > 0);
+}
+
+pub const CalcOut = struct {
+    lon: f64,
+    lat: f64,
+    distance: f64,
+    lon_speed: f64,
+    lat_speed: f64,
+    distance_speed: f64,
+};
+
+pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
+    var xxret: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    @memset(&err_buf, 0);
+
+    const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_buf);
+
+    if (ret_flag < 0) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xxret[0],
+        .lat = xxret[1],
+        .distance = xxret[2],
+        .lon_speed = xxret[3],
+        .lat_speed = xxret[4],
+        .distance_speed = xxret[5],
+    };
+}
+
+test "calc returns ephemeris" {
+    setEphePath("ephe");
+
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
+    const expected = CalcOut{
+        .lon = 2.2698886768788533e1,
+        .lat = -5.68713730562752e-5,
+        .distance = 1.0026066384950405e0,
+        .lon_speed = 9.802836638802254e-1,
+        .lat_speed = 3.3018284460201747e-5,
+        .distance_speed = 2.891872861964314e-4,
+    };
+    try std.testing.expectEqual(expected, eph);
+}
+
+test "calc with an invalid ipl returns error" {
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const INVALID_PLANET: i32 = -42069;
+    _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch {
+        const expected = "illegal planet number -42069.";
+        try std.testing.expectEqualStrings(expected, diags.errMsg());
+    };
+}
+
+pub fn calcUt(tjd_ut: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
+    var xxret: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    @memset(&err_buf, 0);
+
+    const ret_flag = sweph.swe_calc_ut(tjd_ut, ipl, iflag, &xxret, &err_buf);
+
+    if (ret_flag < @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xxret[0],
+        .lat = xxret[1],
+        .distance = xxret[2],
+        .lon_speed = xxret[3],
+        .lat_speed = xxret[4],
+        .distance_speed = xxret[5],
+    };
+}
+
+test "calcUt" {
+    setEphePath("ephe");
+
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const eph = try calcUt(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
+    const expected = CalcOut{
+        .lon = 2.2699560310264168e1,
+        .lat = -5.684848332554287e-5,
+        .distance = 1.0026068371922634e0,
+        .lon_speed = 9.802833316902666e-1,
+        .lat_speed = 3.301691113308882e-5,
+        .distance_speed = 2.8918691684259125e-4,
+    };
+    try std.testing.expectEqual(expected, eph);
+}
+
+pub fn calcPctr(tjd: f64, ipl: i32, iplctr: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
+    var xxret: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    @memset(&err_buf, 0);
+
+    const ret_flag = sweph.swe_calc_pctr(tjd, ipl, iplctr, iflag, &xxret, &err_buf);
+
+    if (ret_flag < @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xxret[0],
+        .lat = xxret[1],
+        .distance = xxret[2],
+        .lon_speed = xxret[3],
+        .lat_speed = xxret[4],
+        .distance_speed = xxret[5],
+    };
+}
+
+test "calcPctr" {
+    setEphePath("ephe");
+
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const eph = try calcPctr(jd, sweph.SE_EARTH, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
+    const expected = CalcOut{
+        .lon = 2.026988867841706e2,
+        .lat = 5.687222955612085e-5,
+        .distance = 1.0026049617855035e0,
+        .lon_speed = 9.802839852538352e-1,
+        .lat_speed = -3.303987678735e-5,
+        .distance_speed = 2.891912115442801e-4,
+    };
+    try std.testing.expectEqual(expected, eph);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
