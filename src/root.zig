@@ -523,6 +523,81 @@ test "heliacalAngle" {
     try std.testing.expectApproxEqAbs(expected, angle, 0.1);
 }
 
+pub fn topoArcusVisionis(
+    tjdut: f64,
+    geo: [3]f64, // longitude, latitude, altitude
+    atm: [4]f64, // pressure, temperature, humidity, etc.
+    obs: [6]f64, // observer parameters
+    helflag: i32,
+    mag: f64,
+    azi_obj: f64,
+    alt_obj: f64,
+    azi_sun: f64,
+    azi_moon: f64,
+    alt_moon: f64,
+    diags: ?*Diagnostics,
+) SweErr!f64 {
+    var angle: f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+
+    const ret_flag = sweph.swe_topo_arcus_visionis(
+        tjdut,
+        @constCast(&geo),
+        @constCast(&atm),
+        @constCast(&obs),
+        helflag,
+        mag,
+        azi_obj,
+        alt_obj,
+        azi_sun,
+        azi_moon,
+        alt_moon,
+        &angle,
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return angle;
+}
+
+test "topoArcusVisionis" {
+    const jd: f64 = 2449090.1145833;
+    const geo: [3]f64 = .{ 0, 100, 0 };
+    const atm: [4]f64 = .{ 0, 0, 0, 0 };
+    const obs: [6]f64 = .{ 0, 0, 1000, 30, 0, 0 };
+    const mag: f64 = 0.0;
+    const azi_obj: f64 = 0.0;
+    const alt_obj: f64 = 0.0;
+    const azi_sun: f64 = 0.0;
+    const azi_moon: f64 = 0.0;
+    const alt_moon: f64 = 0.0;
+
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const angle = try topoArcusVisionis(
+        jd,
+        geo,
+        atm,
+        obs,
+        sweph.SE_HELFLAG_HIGH_PRECISION,
+        mag,
+        azi_obj,
+        alt_obj,
+        azi_sun,
+        azi_moon,
+        alt_moon,
+        &diags,
+    );
+    const expected: f64 = 9.9e1;
+    try std.testing.expectApproxEqAbs(expected, angle, 0.1);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
