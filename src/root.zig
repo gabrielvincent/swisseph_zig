@@ -21,21 +21,34 @@ const SweErr = error{
 
 pub const Diagnostics = struct {
     allocator: std.mem.Allocator,
-    err: []u8 = "",
+    _err: ?[]u8 = null,
 
     pub fn init(allocator: Allocator) Diagnostics {
         return .{ .allocator = allocator };
     }
 
-    fn setErr(self: *@This(), buffer: []const u8) !void {
-        const str_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
+    fn setErrMsg(self: *@This(), msg: []const u8) !void {
+        const str_len = std.mem.indexOfScalar(u8, msg, 0) orelse msg.len;
 
-        self.err = try self.allocator.alloc(u8, str_len);
-        @memcpy(self.err[0..str_len], buffer[0..str_len]);
+        if (self._err) |err| {
+            self._err = try self.allocator.realloc(err, str_len);
+        } else {
+            self._err = try self.allocator.alloc(u8, str_len);
+        }
+
+        @memcpy(self._err.?[0..str_len], msg[0..str_len]);
+    }
+
+    pub fn errMsg(self: *const @This()) []const u8 {
+        if (self._err) |err| {
+            const ret: []const u8 = err;
+            return ret;
+        }
+        return "";
     }
 
     fn deinit(self: *@This()) void {
-        self.allocator.free(self.err);
+        if (self._err) |err| self.allocator.free(err);
     }
 };
 
@@ -48,17 +61,6 @@ pub const CalcOut = struct {
     distance_speed: f64,
 };
 
-/// /// Converts a fixed-size, null-terminated string buffer to a heap-allocated string slice
-/// /// using the provided allocator.
-/// /// Caller owns the returned memory via the allocator strategy.
-/// fn copyNullTerminatedStr(allocator: Allocator, buffer: []const u8) ![]const u8 {
-///     const str_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
-///     const allocated = try allocator.alloc(u8, str_len);
-///
-///     @memcpy(allocated[0..str_len], buffer[0..str_len]);
-///
-///     return allocated[0..str_len];
-/// }
 pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
@@ -68,7 +70,7 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut 
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            try d.setErr(&err_buf);
+            try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -108,7 +110,7 @@ test "calc with an invalid ipl returns error" {
     const INVALID_PLANET: i32 = -42069;
     _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch {
         const expected = "illegal planet number -42069.";
-        try std.testing.expectEqualStrings(expected, diags.err);
+        try std.testing.expectEqualStrings(expected, diags.errMsg());
     };
 }
 
@@ -150,7 +152,7 @@ pub fn heliacalUt(
 
     if (ret_val < 0) {
         if (diags) |d| {
-            try d.setErr(&err_buf);
+            try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -251,7 +253,7 @@ pub fn heliacalPhenoUt(
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            try d.setErr(&err_buf);
+            try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -388,7 +390,7 @@ pub fn visLimitMag(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErr(&err_buf);
+            try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -483,7 +485,7 @@ pub fn heliacalAngle(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErr(&err_buf);
+            try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
     }
