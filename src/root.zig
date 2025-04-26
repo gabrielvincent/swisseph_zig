@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const testing = std.testing;
 const sweph = @cImport({
     // Include the swisseph header
     @cInclude("swephexp.h");
@@ -14,21 +16,28 @@ const SweRetFlag = enum(i32) {
 const SweErr = error{
     Unknown,
     CalcFailure,
+    OutOfMemory,
 };
 
-const Diagnostics = struct {
-    err: []const u8,
-};
+pub const Diagnostics = struct {
+    allocator: std.mem.Allocator,
+    err: []u8 = "",
 
-/// Converts a fixed-size, null-terminated string buffer to a heap-allocated string slice
-/// that can be safely stored and used after the original buffer is out of scope.
-/// Caller owns the returned memory and is responsible for freeing it.
-fn copyNullTerminatedStr(buffer: []const u8) []const u8 {
-    const err_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
-    const allocated = std.heap.page_allocator.alloc(u8, err_len) catch unreachable;
-    @memcpy(allocated.ptr, buffer);
-    return allocated;
-}
+    pub fn init(allocator: Allocator) Diagnostics {
+        return .{ .allocator = allocator };
+    }
+
+    fn setErr(self: *@This(), buffer: []const u8) !void {
+        const str_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
+
+        self.err = try self.allocator.alloc(u8, str_len);
+        @memcpy(self.err[0..str_len], buffer[0..str_len]);
+    }
+
+    fn deinit(self: *@This()) void {
+        self.allocator.free(self.err);
+    }
+};
 
 pub const CalcOut = struct {
     lon: f64,
@@ -39,7 +48,18 @@ pub const CalcOut = struct {
     distance_speed: f64,
 };
 
-pub fn calc(jd: f64, ipl: i32, iflag: i32, diagn: ?*Diagnostics) SweErr!CalcOut {
+/// /// Converts a fixed-size, null-terminated string buffer to a heap-allocated string slice
+/// /// using the provided allocator.
+/// /// Caller owns the returned memory via the allocator strategy.
+/// fn copyNullTerminatedStr(allocator: Allocator, buffer: []const u8) ![]const u8 {
+///     const str_len = std.mem.indexOfScalar(u8, buffer, 0) orelse buffer.len;
+///     const allocated = try allocator.alloc(u8, str_len);
+///
+///     @memcpy(allocated[0..str_len], buffer[0..str_len]);
+///
+///     return allocated[0..str_len];
+/// }
+pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut {
     var xxret: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
     @memset(&err_buf, 0);
@@ -47,8 +67,8 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, diagn: ?*Diagnostics) SweErr!CalcOut 
     const ret_flag = sweph.swe_calc(jd, ipl, iflag, &xxret, &err_buf);
 
     if (ret_flag < 0) {
-        if (diagn) |d| {
-            d.err = copyNullTerminatedStr(&err_buf);
+        if (diags) |d| {
+            try d.setErr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -67,7 +87,8 @@ test "calc returns ephemeris" {
     setEphePath("ephe");
 
     const jd: f64 = 2449090.1145833;
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const eph = try calc(jd, sweph.SE_SUN, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags);
     const expected = CalcOut{
         .lon = 2.2698886768788533e1,
@@ -82,7 +103,8 @@ test "calc returns ephemeris" {
 
 test "calc with an invalid ipl returns error" {
     const jd: f64 = 2449090.1145833;
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const INVALID_PLANET: i32 = -42069;
     _ = calc(jd, INVALID_PLANET, sweph.SEFLG_SPEED | sweph.SEFLG_JPLEPH, &diags) catch {
         const expected = "illegal planet number -42069.";
@@ -128,7 +150,7 @@ pub fn heliacalUt(
 
     if (ret_val < 0) {
         if (diags) |d| {
-            d.err = copyNullTerminatedStr(&err_buf);
+            try d.setErr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -147,7 +169,8 @@ test "heliacalUt" {
     const geo: [3]f64 = .{ 0, 0, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const hel = try heliacalUt(
         jd,
         geo,
@@ -228,7 +251,7 @@ pub fn heliacalPhenoUt(
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            d.err = copyNullTerminatedStr(&err_buf);
+            try d.setErr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -270,7 +293,8 @@ test "heliacalPhenoUt" {
     const geo: [3]f64 = .{ 0, 0, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 0, 0, 0, 0 };
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const hel = try heliacalPhenoUt(
         jd,
         geo,
@@ -364,7 +388,7 @@ pub fn visLimitMag(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            d.err = copyNullTerminatedStr(&err_buf);
+            try d.setErr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -398,7 +422,8 @@ test "vis_limit_mag" {
     const geo: [3]f64 = .{ 0, 100, 0 };
     const atm: [4]f64 = .{ 0, 0, 0, 0 };
     const obs: [6]f64 = .{ 0, 0, 1000, 30, 0, 0 };
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const limMag = try visLimitMag(
         jd,
         geo,
@@ -458,7 +483,7 @@ pub fn heliacalAngle(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            d.err = copyNullTerminatedStr(&err_buf);
+            try d.setErr(&err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -477,7 +502,8 @@ test "heliacalAngle" {
     const azi_moon: f64 = 0.0;
     const alt_moon: f64 = 0.0;
 
-    var diags: Diagnostics = undefined;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
     const angle = try heliacalAngle(
         jd,
         geo,
