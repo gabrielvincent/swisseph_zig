@@ -632,6 +632,23 @@ test "version" {
     try testing.expect(partsNum.items.len > 0);
 }
 
+pub fn getLibraryPath(allocator: Allocator) ![]const u8 {
+    var buf: [sweph.AS_MAXCH]u8 = undefined;
+    _ = sweph.swe_get_library_path(&buf);
+
+    const str_len = std.mem.indexOfScalar(u8, &buf, 0) orelse buf.len;
+    const copy = try allocator.alloc(u8, str_len);
+    @memcpy(copy.ptr, buf[0..str_len]);
+
+    return copy;
+}
+
+test "getLibraryPath" {
+    const libPath = try getLibraryPath(testing.allocator);
+    defer testing.allocator.free(libPath);
+    try testing.expect(libPath.len > 0);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
