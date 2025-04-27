@@ -740,7 +740,6 @@ pub fn solcross(x2cross: f64, jd_et: f64, flag: i32, diags: ?*Diagnostics) !f64 
     // See the implementation of `swe_solcross` for more info in sweph.c
     if (jd < jd_et) {
         if (diags) |d| {
-            std.debug.print("will set: {s}\n", .{err_buf});
             try d.setErrMsg(&err_buf);
         }
         return SweErr.CalcFailure;
@@ -764,9 +763,36 @@ test "solcross successfully fails" {
     const lon: f64 = 700;
     var diags = Diagnostics.init(testing.allocator);
     defer diags.deinit();
-    _ = solcross(lon, start_jd, sweph.SEFLG_NONUT, &diags) catch |err| {
+    _ = solcross(lon, start_jd, -69, &diags) catch |err| {
         try testing.expect(err == SweErr.CalcFailure);
     };
+}
+
+pub fn solcrossUt(x2cross: f64, jd_ut: f64, flag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_solcross_ut(x2cross, jd_ut, flag, &err_buf);
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_solcross_ut` for more info in sweph.c
+    if (jd < jd_ut) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "solcrossUt" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try solcrossUt(lon, start_jd, sweph.SEFLG_TRUEPOS, &diags);
+
+    try testing.expect(jd > start_jd);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
