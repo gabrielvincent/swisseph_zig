@@ -11,3 +11,10 @@ pub fn split(allocator: Allocator, str: []const u8, delimiter: []const u8) !std.
 
     return parts;
 }
+
+pub fn strSliceToFixed(slice: []const u8, comptime size: usize) [size]u8 {
+    var buf: [size]u8 = undefined;
+    @memcpy(buf[0..slice.len], slice);
+    buf[slice.len] = 0;
+    return buf;
+}
