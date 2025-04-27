@@ -795,6 +795,106 @@ test "solcrossUt" {
     try testing.expect(jd > start_jd);
 }
 
+pub fn mooncross(x2cross: f64, jd_et: f64, flag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_mooncross(x2cross, jd_et, flag, &err_buf);
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_solcross` for more info in sweph.c
+    if (jd < jd_et) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "mooncross" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try mooncross(lon, start_jd, sweph.SEFLG_TRUEPOS, &diags);
+
+    try testing.expect(jd > start_jd);
+}
+
+pub fn mooncrossUt(x2cross: f64, jd_ut: f64, flag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_mooncross(x2cross, jd_ut, flag, &err_buf);
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_solcross` for more info in sweph.c
+    if (jd < jd_ut) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "mooncrossUt" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try mooncross(lon, start_jd, sweph.SEFLG_TRUEPOS, &diags);
+
+    try testing.expect(jd > start_jd);
+}
+
+pub fn mooncrossNode(
+    jd_et: f64,
+    flag: i32,
+    lon: f64,
+    lat: f64,
+    diags: ?*Diagnostics,
+) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_mooncross_node(
+        jd_et,
+        flag,
+        @constCast(&lon),
+        @constCast(&lat),
+        &err_buf,
+    );
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_mooncross_node` for more info in sweph.c
+    if (jd < jd_et) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "mooncrossNode" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69;
+    const lat: f64 = 420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try mooncrossNode(
+        start_jd,
+        sweph.SEFLG_TRUEPOS,
+        lon,
+        lat,
+        &diags,
+    );
+
+    try testing.expect(jd > start_jd);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
