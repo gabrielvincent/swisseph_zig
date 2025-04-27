@@ -895,6 +895,52 @@ test "mooncrossNode" {
     try testing.expect(jd > start_jd);
 }
 
+pub fn mooncrossNodeUt(
+    jd_ut: f64,
+    flag: i32,
+    lon: f64,
+    lat: f64,
+    diags: ?*Diagnostics,
+) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+
+    const jd = sweph.swe_mooncross_node_ut(
+        jd_ut,
+        flag,
+        @constCast(&lon),
+        @constCast(&lat),
+        &err_buf,
+    );
+
+    // if jd < jd_et, this is an error.
+    // See the implementation of `swe_mooncross_node_ut` for more info in sweph.c
+    if (jd < jd_ut) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "mooncrossNodeUt" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69;
+    const lat: f64 = 420;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const jd = try mooncrossNodeUt(
+        start_jd,
+        sweph.SEFLG_TRUEPOS,
+        lon,
+        lat,
+        &diags,
+    );
+
+    try testing.expect(jd > start_jd);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
