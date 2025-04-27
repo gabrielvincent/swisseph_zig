@@ -1044,6 +1044,61 @@ test "fixstar" {
     _ = try fixstar("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
 }
 
+pub fn fixstarUt(
+    star: []const u8,
+    tjd_ut: f64,
+    iflag: i32,
+    diags: ?*Diagnostics,
+) !CalcOut {
+    var xx: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar_ut(&star_buf, tjd_ut, iflag, &xx, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xx[0],
+        .lat = xx[1],
+        .distance = xx[2],
+        .lon_speed = xx[3],
+        .lat_speed = xx[4],
+        .distance_speed = xx[5],
+    };
+}
+
+test "fixstarUt" {
+    const jd: f64 = 2449090.1145833;
+    _ = try fixstarUt("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
+}
+
+pub fn fixstartMag(star: []const u8, diags: ?*Diagnostics) !f64 {
+    var mag: f64 = undefined;
+    var err_buf: [256]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar_mag(&star_buf, &mag, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return mag;
+}
+
+test "fixstartMag" {
+    _ = try fixstartMag("Bunda", undefined);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
