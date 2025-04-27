@@ -72,17 +72,14 @@ pub fn heliacalUt(
     var dret: [50]f64 = undefined; // Array to store results
     var err_buf: [256:0]u8 = undefined;
 
-    var obj_name_buf: [256]u8 = undefined;
-    @memcpy(obj_name_buf[0..object_name.len], object_name);
-    obj_name_buf[object_name.len] = 0;
-    const c_object_name = &obj_name_buf;
+    var object_name_buf = utils.strSliceToFixed(object_name, 256);
 
     const ret_val = sweph.swe_heliacal_ut(
         jd_start,
         @constCast(&geo),
         @constCast(&atm),
         @constCast(&obs),
-        c_object_name,
+        &object_name_buf,
         event_type,
         helflag,
         &dret,
@@ -975,6 +972,76 @@ test "helioCross" {
     const jd = try helioCross(sweph.SE_MERCURY, lon, start_jd, sweph.SEFLG_TRUEPOS, dir, &diags);
 
     try testing.expect(jd > start_jd);
+}
+
+pub fn helioCrossUt(ipl: i32, x2cross: f64, jd_ut: f64, iflag: i32, dir: i32, diags: ?*Diagnostics) !f64 {
+    var jd: f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+
+    const ret_flag = sweph.swe_helio_cross_ut(
+        ipl,
+        x2cross,
+        jd_ut,
+        iflag,
+        dir,
+        @constCast(&jd),
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "helioCrossUt" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    const dir: i32 = 1;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+
+    const jd = try helioCrossUt(sweph.SE_MERCURY, lon, start_jd, sweph.SEFLG_TRUEPOS, dir, &diags);
+
+    try testing.expect(jd > start_jd);
+}
+
+pub fn fixstar(
+    star: []const u8,
+    tjd: f64,
+    iflag: i32,
+    diags: ?*Diagnostics,
+) !CalcOut {
+    var xx: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar(&star_buf, tjd, iflag, &xx, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xx[0],
+        .lat = xx[1],
+        .distance = xx[2],
+        .lon_speed = xx[3],
+        .lat_speed = xx[4],
+        .distance_speed = xx[5],
+    };
+}
+
+test "fixstar" {
+    const jd: f64 = 2449090.1145833;
+    _ = try fixstar("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
