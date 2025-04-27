@@ -941,6 +941,42 @@ test "mooncrossNodeUt" {
     try testing.expect(jd > start_jd);
 }
 
+pub fn helioCross(ipl: i32, x2cross: f64, jd_et: f64, iflag: i32, dir: i32, diags: ?*Diagnostics) !f64 {
+    var jd: f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+
+    const ret_flag = sweph.swe_helio_cross(
+        ipl,
+        x2cross,
+        jd_et,
+        iflag,
+        dir,
+        @constCast(&jd),
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return jd;
+}
+
+test "helioCross" {
+    const start_jd: f64 = 2449090.1145833;
+    const lon: f64 = 69.420;
+    const dir: i32 = 1;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+
+    const jd = try helioCross(sweph.SE_MERCURY, lon, start_jd, sweph.SEFLG_TRUEPOS, dir, &diags);
+
+    try testing.expect(jd > start_jd);
+}
+
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
 }
