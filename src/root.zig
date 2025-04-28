@@ -18,6 +18,7 @@ const SweErr = error{
     Unknown,
     CalcFailure,
     OutOfMemory,
+    NotFound,
 };
 
 pub const Diagnostics = struct {
@@ -1078,7 +1079,7 @@ test "fixstarUt" {
     _ = try fixstarUt("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
 }
 
-pub fn fixstartMag(star: []const u8, diags: ?*Diagnostics) !f64 {
+pub fn fixstarMag(star: []const u8, diags: ?*Diagnostics) !f64 {
     var mag: f64 = undefined;
     var err_buf: [256]u8 = undefined;
     var star_buf = utils.strSliceToFixed(star, 41);
@@ -1095,12 +1096,143 @@ pub fn fixstartMag(star: []const u8, diags: ?*Diagnostics) !f64 {
     return mag;
 }
 
-test "fixstartMag" {
-    _ = try fixstartMag("Bunda", undefined);
+test "fixstarMag" {
+    _ = try fixstarMag("Bunda", undefined);
+}
+
+pub fn fixstar2(
+    star: []const u8,
+    tjd: f64,
+    iflag: i32,
+    diags: ?*Diagnostics,
+) !CalcOut {
+    var xx: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar2(&star_buf, tjd, iflag, &xx, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xx[0],
+        .lat = xx[1],
+        .distance = xx[2],
+        .lon_speed = xx[3],
+        .lat_speed = xx[4],
+        .distance_speed = xx[5],
+    };
+}
+
+test "fixstar2" {
+    const jd: f64 = 2449090.1145833;
+    _ = try fixstar2("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
+}
+
+pub fn fixstar2Ut(
+    star: []const u8,
+    tjd_ut: f64,
+    iflag: i32,
+    diags: ?*Diagnostics,
+) !CalcOut {
+    var xx: [6]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar2_ut(&star_buf, tjd_ut, iflag, &xx, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return CalcOut{
+        .lon = xx[0],
+        .lat = xx[1],
+        .distance = xx[2],
+        .lon_speed = xx[3],
+        .lat_speed = xx[4],
+        .distance_speed = xx[5],
+    };
+}
+
+test "fixstar2Ut" {
+    const jd: f64 = 2449090.1145833;
+    _ = try fixstar2Ut("Bunda", jd, sweph.SEFLG_JPLEPH | sweph.SEFLG_SPEED, undefined);
+}
+
+pub fn fixstar2Mag(star: []const u8, diags: ?*Diagnostics) !f64 {
+    var mag: f64 = undefined;
+    var err_buf: [256]u8 = undefined;
+    var star_buf = utils.strSliceToFixed(star, 41);
+
+    const ret_flag = sweph.swe_fixstar2_mag(&star_buf, &mag, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return mag;
+}
+
+test "fixstar2Mag" {
+    _ = try fixstar2Mag("Bunda", undefined);
+}
+
+pub fn close() void {
+    sweph.swe_close();
 }
 
 pub fn setEphePath(path: [*c]const u8) void {
     sweph.swe_set_ephe_path(path);
+}
+
+pub fn setJplFile(fname: []const u8) void {
+    sweph.swe_set_jpl_file(fname);
+}
+
+test "setJplFile" {
+    sweph.swe_set_jpl_file("path/to/file");
+}
+
+pub fn getPlanetName(allocator: Allocator, ipl: i32) ![]const u8 {
+    var buf: [256]u8 = undefined;
+    @memset(&buf, 0);
+
+    _ = sweph.swe_get_planet_name(ipl, &buf);
+
+    const notFoundIdx = std.mem.indexOf(u8, &buf, "not found");
+    if (notFoundIdx != null) {
+        return SweErr.NotFound;
+    }
+
+    const str_len = std.mem.indexOfScalar(u8, &buf, 0) orelse buf.len;
+    const pl_name = try allocator.alloc(u8, str_len);
+    @memcpy(pl_name.ptr, buf[0..str_len]);
+
+    return pl_name;
+}
+
+test "getPlanetName finds name for existing planet" {
+    const pl_name = try getPlanetName(testing.allocator, sweph.SE_EARTH);
+    defer testing.allocator.free(pl_name);
+    try std.testing.expectEqualStrings("Earth", pl_name);
+}
+
+test "getPlanetName returns an error if planet name is not found" {
+    _ = getPlanetName(testing.allocator, std.math.maxInt(i32)) catch |err| {
+        try std.testing.expect(err == SweErr.NotFound);
+    };
 }
 
 pub const defs = struct {
