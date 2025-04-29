@@ -18,3 +18,15 @@ pub fn strSliceToFixed(slice: []const u8, comptime size: usize) [size]u8 {
     buf[slice.len] = 0;
     return buf;
 }
+
+pub fn strlen(ptr: anytype) usize {
+    const T = @TypeOf(ptr);
+
+    if (@typeInfo(T) == .array or @typeInfo(T) == .pointer) {
+        var len: usize = 0;
+        while (ptr[len] != 0) : (len += 1) {}
+        return len;
+    }
+
+    @compileError("Unsupported type for strlen: " ++ @typeName(T));
+}

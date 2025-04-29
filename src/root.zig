@@ -1235,6 +1235,109 @@ test "getPlanetName returns an error if planet name is not found" {
     };
 }
 
+pub fn setTopo(geolon: f64, geolat: f64, geoalt: f64) void {
+    sweph.swe_set_topo(geolon, geolat, geoalt);
+}
+
+test "setTopo" {
+    setTopo(69, 4.20, 80085);
+}
+
+pub fn setSidMode(sid_mode: i32, t0: f64, ayan_t0: f64) void {
+    sweph.swe_set_sid_mode(sid_mode, t0, ayan_t0);
+}
+
+test "setSidMode" {
+    setSidMode(sweph.SE_SIDM_ARYABHATA, 0, 0);
+}
+
+pub fn getAyanamsaEx(tjd_et: f64, iflag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+    var aya: f64 = undefined;
+
+    const ret_flag = sweph.swe_get_ayanamsa_ex(tjd_et, iflag, &aya, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return aya;
+}
+
+test "getAyanamsaEx" {
+    //
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const aya = try getAyanamsaEx(jd, sweph.SEFLG_JPLEPH, &diags);
+
+    try testing.expect(aya > 0);
+}
+
+pub fn getAyanamsaExUt(tjd_ut: f64, iflag: i32, diags: ?*Diagnostics) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+    var aya: f64 = undefined;
+
+    const ret_flag = sweph.swe_get_ayanamsa_ex_ut(tjd_ut, iflag, &aya, &err_buf);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return aya;
+}
+
+test "getAyanamsaExUt" {
+    //
+    const jd: f64 = 2449090.1145833;
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const aya = try getAyanamsaExUt(jd, sweph.SEFLG_JPLEPH, &diags);
+
+    try testing.expect(aya > 0);
+}
+
+pub fn getAyanamsa(tjd_et: f64) f64 {
+    return sweph.swe_get_ayanamsa(tjd_et);
+}
+
+test "getAyanamsa" {
+    const jd: f64 = 2449090.1145833;
+    const aya = getAyanamsa(jd);
+
+    try testing.expect(aya > 0);
+}
+
+pub fn getAyanamsaUt(tjd_ut: f64) f64 {
+    return sweph.swe_get_ayanamsa_ut(tjd_ut);
+}
+
+test "getAyanamsaUt" {
+    const jd: f64 = 2449090.1145833;
+    const aya = getAyanamsaUt(jd);
+
+    try testing.expect(aya > 0);
+}
+
+pub fn getAyanamsaName(isidmode: i32) []const u8 {
+    const aya_name = sweph.swe_get_ayanamsa_name(isidmode);
+
+    const len = utils.strlen(aya_name);
+
+    return aya_name[0..len];
+}
+
+test "getAyanamsaName" {
+    const name = getAyanamsaName(sweph.SE_SIDM_LAHIRI);
+    try testing.expectEqualStrings(name, "Lahiri");
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
