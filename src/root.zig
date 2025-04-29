@@ -1338,6 +1338,43 @@ test "getAyanamsaName" {
     try testing.expectEqualStrings(name, "Lahiri");
 }
 
+const GetCurrentFileDataOut = struct {
+    filepath: []const u8,
+    file_start_jd: f64,
+    file_end_jd: f64,
+    jpl_ephemeris_num: i32,
+};
+
+pub fn getCurrentFileData(ifno: i32) !GetCurrentFileDataOut {
+    var tfstart: f64 = undefined;
+    var tfend: f64 = undefined;
+    var denum: i32 = undefined;
+
+    const filepath = sweph.swe_get_current_file_data(ifno, &tfstart, &tfend, &denum);
+    if (filepath == null) {
+        std.debug.print("null", .{});
+        return SweErr.NotFound;
+    }
+
+    const len = utils.strlen(filepath);
+
+    return GetCurrentFileDataOut{
+        .filepath = filepath[0..len],
+        .file_start_jd = tfstart,
+        .file_end_jd = tfend,
+        .jpl_ephemeris_num = denum,
+    };
+}
+
+test "getCurrentFileData" {
+    const res = try getCurrentFileData(0);
+    try testing.expectEqualStrings("ephe/file", res.filepath);
+
+    _ = getCurrentFileData(5) catch |err| {
+        try testing.expect(err == SweErr.NotFound);
+    };
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
