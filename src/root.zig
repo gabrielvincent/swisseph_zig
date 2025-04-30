@@ -19,6 +19,12 @@ const SweErr = error{
     CalcFailure,
     OutOfMemory,
     NotFound,
+    InvalidDate,
+};
+
+pub const CalendarFlag = enum(u8) {
+    g = 'g',
+    j = 'j',
 };
 
 pub const Diagnostics = struct {
@@ -1352,7 +1358,6 @@ pub fn getCurrentFileData(ifno: i32) !GetCurrentFileDataOut {
 
     const filepath = sweph.swe_get_current_file_data(ifno, &tfstart, &tfend, &denum);
     if (filepath == null) {
-        std.debug.print("null", .{});
         return SweErr.NotFound;
     }
 
@@ -1373,6 +1378,39 @@ test "getCurrentFileData" {
     _ = getCurrentFileData(5) catch |err| {
         try testing.expect(err == SweErr.NotFound);
     };
+}
+
+pub fn dateConversion(
+    y: i32,
+    m: i32,
+    d: i32,
+    uttime: f64,
+    c: CalendarFlag,
+) !f64 {
+    var jd: f64 = undefined;
+
+    const calendar_byte: u8 = @intFromEnum(c);
+    const ret_flag = sweph.swe_date_conversion(y, m, d, uttime, calendar_byte, &jd);
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        return SweErr.InvalidDate;
+    }
+
+    return jd;
+}
+
+test "dateConversion" {
+    const jd = try dateConversion(1970, 1, 1, 0, .g);
+
+    const expected: f64 = 2440587.5;
+    try testing.expectEqual(expected, jd);
+
+    _ = dateConversion(1970, 1, 32, 0, .g) catch |err| {
+        try testing.expect(err == SweErr.InvalidDate);
+        return;
+    };
+
+    try testing.expect(false);
 }
 
 pub const defs = struct {
