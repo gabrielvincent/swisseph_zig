@@ -1413,6 +1413,16 @@ test "dateConversion" {
     try testing.expect(false);
 }
 
+pub fn julday(year: i32, month: i32, day: i32, hour: f64, gregflag: i32) f64 {
+    return sweph.swe_julday(year, month, day, hour, gregflag);
+}
+
+test "julday" {
+    const jd = julday(1970, 1, 1, 0, sweph.SE_GREG_CAL);
+    const expected: f64 = 2440587.5;
+    try testing.expectEqual(expected, jd);
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
