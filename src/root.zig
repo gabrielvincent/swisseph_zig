@@ -1478,6 +1478,75 @@ test "revjul" {
     try testing.expectEqual(expected, date);
 }
 
+const UtcToJdOut = struct {
+    jd_tt: f64,
+    jd_ut1: f64,
+};
+
+pub fn utcToJd(
+    iyear: i32,
+    imonth: i32,
+    iday: i32,
+    ihour: i32,
+    imin: i32,
+    dsec: f64,
+    gregflag: i32,
+    diags: ?*Diagnostics,
+) !UtcToJdOut {
+    var jds: [2]f64 = undefined;
+    var err_buf: [256:0]u8 = undefined;
+
+    const ret_flag = sweph.swe_utc_to_jd(
+        iyear,
+        imonth,
+        iday,
+        ihour,
+        imin,
+        dsec,
+        gregflag,
+        &jds,
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErrMsg(&err_buf);
+        }
+        return SweErr.InvalidDate;
+    }
+
+    return .{
+        .jd_tt = jds[0],
+        .jd_ut1 = jds[1],
+    };
+}
+
+test "utcToJd" {
+    const jds = try utcToJd(1970, 1, 1, 0, 0, 0, sweph.SE_GREG_CAL, undefined);
+    const expected_jds: UtcToJdOut = .{
+        .jd_tt = 2.440587500465062e6,
+        .jd_ut1 = 2.4405875e6,
+    };
+    try testing.expectEqual(expected_jds, jds);
+
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const year = 1970;
+    const month = 1;
+    const invalid_day = -1;
+    _ = utcToJd(year, month, invalid_day, 0, 0, 0, 2, &diags) catch |err| {
+        try testing.expect(err == SweErr.InvalidDate);
+
+        const expected_err_msg = try std.fmt.allocPrint(
+            testing.allocator,
+            "invalid date: year = {d}, month = {d}, day = {d}",
+            .{ year, month, invalid_day },
+        );
+        defer testing.allocator.free(expected_err_msg);
+        try testing.expectEqualStrings(expected_err_msg, diags.errMsg());
+    };
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
