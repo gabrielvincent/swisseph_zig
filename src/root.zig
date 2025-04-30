@@ -1441,16 +1441,42 @@ test "julday" {
     try testing.expectEqual(february_1, jd);
 }
 
-// const RevJulOut = struct {
-//     year: i32,
-//     month: i32,
-//     day: i32,
-//     hour: f64,
-// };
-//
-// pub fn revjul(jd: f64, gregflag: i32) !RevJulOut {
-//
-// }
+const RevJulOut = struct {
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: f64,
+};
+
+pub fn revjul(jd: f64, gregflag: i32) RevJulOut {
+    var year: i32 = undefined;
+    var month: i32 = undefined;
+    var day: i32 = undefined;
+    var hour: f64 = undefined;
+
+    sweph.swe_revjul(jd, gregflag, &year, &month, &day, &hour);
+
+    return .{
+        .year = year,
+        .month = month,
+        .day = day,
+        .hour = hour,
+    };
+}
+
+test "revjul" {
+    const january_1_1970 = 2440587.5;
+    const date = revjul(january_1_1970, sweph.SE_GREG_CAL);
+
+    const expected = RevJulOut{
+        .year = 1970,
+        .month = 1,
+        .day = 1,
+        .hour = 0.0,
+    };
+
+    try testing.expectEqual(expected, date);
+}
 
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
