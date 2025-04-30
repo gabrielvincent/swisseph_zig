@@ -1418,10 +1418,39 @@ pub fn julday(year: i32, month: i32, day: i32, hour: f64, gregflag: i32) f64 {
 }
 
 test "julday" {
-    const jd = julday(1970, 1, 1, 0, sweph.SE_GREG_CAL);
-    const expected: f64 = 2440587.5;
-    try testing.expectEqual(expected, jd);
+    var jd: f64 = undefined;
+
+    jd = julday(1970, 1, -1, 0, sweph.SE_GREG_CAL);
+    const december_30 = 2440585.5;
+    try testing.expectEqual(december_30, jd);
+
+    jd = julday(1970, 1, 0, 0, sweph.SE_GREG_CAL);
+    const december_31 = 2440586.5;
+    try testing.expectEqual(december_31, jd);
+
+    jd = julday(1970, 1, 1, 0, sweph.SE_GREG_CAL);
+    const january_1 = 2440587.5;
+    try testing.expectEqual(january_1, jd);
+
+    jd = julday(1970, 1, 31, 0, sweph.SE_GREG_CAL);
+    const january_31 = 2440617.5;
+    try testing.expectEqual(january_31, jd);
+
+    jd = julday(1970, 1, 32, 0, sweph.SE_GREG_CAL);
+    const february_1 = 2440618.5;
+    try testing.expectEqual(february_1, jd);
 }
+
+// const RevJulOut = struct {
+//     year: i32,
+//     month: i32,
+//     day: i32,
+//     hour: f64,
+// };
+//
+// pub fn revjul(jd: f64, gregflag: i32) !RevJulOut {
+//
+// }
 
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
