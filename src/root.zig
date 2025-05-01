@@ -1547,6 +1547,55 @@ test "utcToJd" {
     };
 }
 
+const JdetToUtcOut = struct {
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: i32,
+    min: i32,
+    sec: f64,
+};
+
+pub fn jdetToUtc(tjd_et: f64, gregflag: i32) JdetToUtcOut {
+    var year: i32 = undefined;
+    var month: i32 = undefined;
+    var day: i32 = undefined;
+    var hour: i32 = undefined;
+    var min: i32 = undefined;
+    var sec: f64 = undefined;
+
+    sweph.swe_jdet_to_utc(
+        tjd_et,
+        gregflag,
+        &year,
+        &month,
+        &day,
+        &hour,
+        &min,
+        &sec,
+    );
+
+    return .{
+        .year = year,
+        .month = month,
+        .day = day,
+        .hour = hour,
+        .min = min,
+        .sec = sec,
+    };
+}
+
+test "jdetToUtc" {
+    const utc = jdetToUtc(2.440587500465062e6, sweph.SE_GREG_CAL);
+
+    try testing.expectEqual(utc.year, 1970);
+    try testing.expectEqual(utc.month, 1);
+    try testing.expectEqual(utc.day, 1);
+    try testing.expectEqual(utc.hour, 0);
+    try testing.expectEqual(utc.min, 0);
+    try testing.expectEqual(utc.sec, 0);
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
