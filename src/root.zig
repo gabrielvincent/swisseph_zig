@@ -1479,7 +1479,7 @@ test "revjul" {
 }
 
 const UtcToJdOut = struct {
-    jd_tt: f64,
+    jd_et: f64,
     jd_ut1: f64,
 };
 
@@ -1516,7 +1516,7 @@ pub fn utcToJd(
     }
 
     return .{
-        .jd_tt = jds[0],
+        .jd_et = jds[0],
         .jd_ut1 = jds[1],
     };
 }
@@ -1524,8 +1524,8 @@ pub fn utcToJd(
 test "utcToJd" {
     const jds = try utcToJd(1970, 1, 1, 0, 0, 0, sweph.SE_GREG_CAL, undefined);
     const expected_jds: UtcToJdOut = .{
-        .jd_tt = 2.440587500465062e6,
-        .jd_ut1 = 2.4405875e6,
+        .jd_et = 2440587.500465062,
+        .jd_ut1 = 2440587.5,
     };
     try testing.expectEqual(expected_jds, jds);
 
@@ -1547,7 +1547,7 @@ test "utcToJd" {
     };
 }
 
-const JdetToUtcOut = struct {
+const UTC = struct {
     year: i32,
     month: i32,
     day: i32,
@@ -1556,7 +1556,7 @@ const JdetToUtcOut = struct {
     sec: f64,
 };
 
-pub fn jdetToUtc(tjd_et: f64, gregflag: i32) JdetToUtcOut {
+pub fn jdetToUtc(tjd_et: f64, gregflag: i32) UTC {
     var year: i32 = undefined;
     var month: i32 = undefined;
     var day: i32 = undefined;
@@ -1586,7 +1586,49 @@ pub fn jdetToUtc(tjd_et: f64, gregflag: i32) JdetToUtcOut {
 }
 
 test "jdetToUtc" {
-    const utc = jdetToUtc(2.440587500465062e6, sweph.SE_GREG_CAL);
+    const jds = try utcToJd(1970, 1, 1, 0, 0, 0, sweph.SE_GREG_CAL, undefined);
+    const utc = jdetToUtc(jds.jd_et, sweph.SE_GREG_CAL);
+
+    try testing.expectEqual(utc.year, 1970);
+    try testing.expectEqual(utc.month, 1);
+    try testing.expectEqual(utc.day, 1);
+    try testing.expectEqual(utc.hour, 0);
+    try testing.expectEqual(utc.min, 0);
+    try testing.expectEqual(utc.sec, 0);
+}
+
+pub fn jdut1ToUtc(tjd_ut: f64, gregflag: i32) UTC {
+    var year: i32 = undefined;
+    var month: i32 = undefined;
+    var day: i32 = undefined;
+    var hour: i32 = undefined;
+    var min: i32 = undefined;
+    var sec: f64 = undefined;
+
+    sweph.swe_jdut1_to_utc(
+        tjd_ut,
+        gregflag,
+        &year,
+        &month,
+        &day,
+        &hour,
+        &min,
+        &sec,
+    );
+
+    return .{
+        .year = year,
+        .month = month,
+        .day = day,
+        .hour = hour,
+        .min = min,
+        .sec = sec,
+    };
+}
+
+test "jdut1ToUtc" {
+    const jds = try utcToJd(1970, 1, 1, 0, 0, 0, sweph.SE_GREG_CAL, undefined);
+    const utc = jdut1ToUtc(jds.jd_ut1, sweph.SE_GREG_CAL);
 
     try testing.expectEqual(utc.year, 1970);
     try testing.expectEqual(utc.month, 1);
