@@ -1638,6 +1638,69 @@ test "jdut1ToUtc" {
     try testing.expectEqual(utc.sec, 0);
 }
 
+pub fn utcTimeZone(
+    iyear: i32,
+    imonth: i32,
+    iday: i32,
+    ihour: i32,
+    imin: i32,
+    dsec: f64,
+    d_timezone: f64,
+) UTC {
+    var year_out: i32 = undefined;
+    var month_out: i32 = undefined;
+    var day_out: i32 = undefined;
+    var hour_out: i32 = undefined;
+    var min_out: i32 = undefined;
+    var sec_out: f64 = undefined;
+
+    sweph.swe_utc_time_zone(
+        iyear,
+        imonth,
+        iday,
+        ihour,
+        imin,
+        dsec,
+        d_timezone,
+        &year_out,
+        &month_out,
+        &day_out,
+        &hour_out,
+        &min_out,
+        &sec_out,
+    );
+
+    return .{
+        .year = year_out,
+        .month = month_out,
+        .day = day_out,
+        .hour = hour_out,
+        .min = min_out,
+        .sec = sec_out,
+    };
+}
+
+test "utcTimeZone" {
+    // swe_utc_time_zone expects timezones west of Greenwich to be positive and
+    // east of Grennwich to be negative
+
+    var utc = utcTimeZone(1970, 1, 1, 0, 0, 0, 3);
+    try testing.expectEqual(1969, utc.year);
+    try testing.expectEqual(12, utc.month);
+    try testing.expectEqual(31, utc.day);
+    try testing.expectEqual(21, utc.hour);
+    try testing.expectEqual(0, utc.min);
+    try testing.expectEqual(0, utc.sec);
+
+    utc = utcTimeZone(1970, 1, 1, 0, 0, 0, -3);
+    try testing.expectEqual(1970, utc.year);
+    try testing.expectEqual(1, utc.month);
+    try testing.expectEqual(1, utc.day);
+    try testing.expectEqual(3, utc.hour);
+    try testing.expectEqual(0, utc.min);
+    try testing.expectEqual(0, utc.sec);
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
