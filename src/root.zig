@@ -20,7 +20,7 @@ const SweErr = error{
     OutOfMemory,
     NotFound,
     InvalidDate,
-    UnableToCalculateHouses,
+    PorphyryFallback,
 };
 
 pub const CalendarFlag = enum(u8) {
@@ -1741,7 +1741,7 @@ pub fn houses(
     // ascmc must be an array of 10 doubles. ascmc[8... 9] are 0 and may be used for additional points in future releases.
     var ascmc: [10]f64 = undefined;
 
-    _ = sweph.swe_houses(
+    const ret_flag = sweph.swe_houses(
         tjd_ut,
         geolat,
         geolon,
@@ -1749,6 +1749,10 @@ pub fn houses(
         cusps_buf.ptr,
         &ascmc,
     );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        return SweErr.PorphyryFallback;
+    }
 
     const result = Houses{
         .cusps = try allocator.alloc(f64, cusp_count),
@@ -1785,6 +1789,17 @@ test "houses" {
     var gauquelin_sectors = try houses(testing.allocator, 2440587.5, 0, 0, 'G');
     defer gauquelin_sectors.deinit(testing.allocator);
     try testing.expectEqual(36, gauquelin_sectors.cusps.len);
+
+    // Houses for latitudes north of the Arctic Circle and south of the Antactic
+    // Circle can't be represented in many house systems. When this happens,
+    // Swiss Ephemeris falls back to using the Porphyry house system.
+    const svalbard_lat = 78.22;
+    const svalbard_lon = 15.65;
+    _ = houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P') catch |err| {
+        try testing.expect(err == SweErr.PorphyryFallback);
+        return;
+    };
+    try testing.expect(false);
 }
 
 pub const defs = struct {
