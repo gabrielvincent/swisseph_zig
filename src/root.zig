@@ -30,26 +30,34 @@ pub const CalendarFlag = enum(u8) {
 
 pub const Diagnostics = struct {
     allocator: std.mem.Allocator,
-    _err: ?[]u8 = null,
+    err: ?anyerror = null,
+    _errMsg: ?[]u8 = null,
 
     pub fn init(allocator: Allocator) Diagnostics {
         return .{ .allocator = allocator };
     }
 
+    fn setErr(self: *@This(), err: anyerror, msg: ?[]const u8) !void {
+        self.err = err;
+        if (msg) |m| {
+            try self.setErrMsg(m);
+        }
+    }
+
     fn setErrMsg(self: *@This(), msg: []const u8) !void {
         const str_len = std.mem.indexOfScalar(u8, msg, 0) orelse msg.len;
 
-        if (self._err) |err| {
-            self._err = try self.allocator.realloc(err, str_len);
+        if (self._errMsg) |em| {
+            self._errMsg = try self.allocator.realloc(em, str_len);
         } else {
-            self._err = try self.allocator.alloc(u8, str_len);
+            self._errMsg = try self.allocator.alloc(u8, str_len);
         }
 
-        @memcpy(self._err.?[0..str_len], msg[0..str_len]);
+        @memcpy(self._errMsg.?[0..str_len], msg[0..str_len]);
     }
 
     pub fn errMsg(self: *const @This()) []const u8 {
-        if (self._err) |err| {
+        if (self._errMsg) |err| {
             const ret: []const u8 = err;
             return ret;
         }
@@ -57,7 +65,7 @@ pub const Diagnostics = struct {
     }
 
     fn deinit(self: *@This()) void {
-        if (self._err) |err| self.allocator.free(err);
+        if (self._errMsg) |err| self.allocator.free(err);
     }
 };
 
@@ -96,7 +104,7 @@ pub fn heliacalUt(
 
     if (ret_val < 0) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -197,7 +205,7 @@ pub fn heliacalPhenoUt(
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -334,7 +342,7 @@ pub fn visLimitMag(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -429,7 +437,7 @@ pub fn heliacalAngle(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -502,7 +510,7 @@ pub fn topoArcusVisionis(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -609,7 +617,7 @@ pub fn calc(jd: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!CalcOut 
 
     if (ret_flag < 0) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -661,7 +669,7 @@ pub fn calcUt(tjd_ut: f64, ipl: i32, iflag: i32, diags: ?*Diagnostics) SweErr!Ca
 
     if (ret_flag < @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -703,7 +711,7 @@ pub fn calcPctr(tjd: f64, ipl: i32, iplctr: i32, iflag: i32, diags: ?*Diagnostic
 
     if (ret_flag < @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -745,7 +753,7 @@ pub fn solcross(x2cross: f64, jd_et: f64, flag: i32, diags: ?*Diagnostics) !f64 
     // See the implementation of `swe_solcross` for more info in sweph.c
     if (jd < jd_et) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -782,7 +790,7 @@ pub fn solcrossUt(x2cross: f64, jd_ut: f64, flag: i32, diags: ?*Diagnostics) !f6
     // See the implementation of `swe_solcross_ut` for more info in sweph.c
     if (jd < jd_ut) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -809,7 +817,7 @@ pub fn mooncross(x2cross: f64, jd_et: f64, flag: i32, diags: ?*Diagnostics) !f64
     // See the implementation of `swe_solcross` for more info in sweph.c
     if (jd < jd_et) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -836,7 +844,7 @@ pub fn mooncrossUt(x2cross: f64, jd_ut: f64, flag: i32, diags: ?*Diagnostics) !f
     // See the implementation of `swe_solcross` for more info in sweph.c
     if (jd < jd_ut) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -875,7 +883,7 @@ pub fn mooncrossNode(
     // See the implementation of `swe_mooncross_node` for more info in sweph.c
     if (jd < jd_et) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -921,7 +929,7 @@ pub fn mooncrossNodeUt(
     // See the implementation of `swe_mooncross_node_ut` for more info in sweph.c
     if (jd < jd_ut) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -962,7 +970,7 @@ pub fn helioCross(ipl: i32, x2cross: f64, jd_et: f64, iflag: i32, dir: i32, diag
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -998,7 +1006,7 @@ pub fn helioCrossUt(ipl: i32, x2cross: f64, jd_ut: f64, iflag: i32, dir: i32, di
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1032,7 +1040,7 @@ pub fn fixstar(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1066,7 +1074,7 @@ pub fn fixstarUt(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1095,7 +1103,7 @@ pub fn fixstarMag(star: []const u8, diags: ?*Diagnostics) !f64 {
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1121,7 +1129,7 @@ pub fn fixstar2(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1155,7 +1163,7 @@ pub fn fixstar2Ut(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1184,7 +1192,7 @@ pub fn fixstar2Mag(star: []const u8, diags: ?*Diagnostics) !f64 {
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1266,7 +1274,7 @@ pub fn getAyanamsaEx(tjd_et: f64, iflag: i32, diags: ?*Diagnostics) !f64 {
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1292,7 +1300,7 @@ pub fn getAyanamsaExUt(tjd_ut: f64, iflag: i32, diags: ?*Diagnostics) !f64 {
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.CalcFailure, &err_buf);
         }
         return SweErr.CalcFailure;
     }
@@ -1511,7 +1519,7 @@ pub fn utcToJd(
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
         if (diags) |d| {
-            try d.setErrMsg(&err_buf);
+            try d.setErr(SweErr.InvalidDate, &err_buf);
         }
         return SweErr.InvalidDate;
     }
@@ -1730,6 +1738,7 @@ pub fn houses(
     geolat: f64,
     geolon: f64,
     hsys: u8,
+    diags: ?*Diagnostics,
 ) !Houses {
     const cusp_count: usize = if (hsys == 'G') 36 else 12;
 
@@ -1751,7 +1760,12 @@ pub fn houses(
     );
 
     if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
-        return SweErr.PorphyryFallback;
+        if (diags) |d| {
+            try d.setErr(
+                SweErr.PorphyryFallback,
+                "impossible to calculate houses for the given house system. will use Porphyry instead.",
+            );
+        }
     }
 
     const result = Houses{
@@ -1776,7 +1790,7 @@ pub fn houses(
 }
 
 test "houses" {
-    var eql_0_aries_houses = try houses(testing.allocator, 2440587.5, 0, 0, 'N');
+    var eql_0_aries_houses = try houses(testing.allocator, 2440587.5, 0, 0, 'N', undefined);
     defer eql_0_aries_houses.deinit(testing.allocator);
     try testing.expectEqual(12, eql_0_aries_houses.cusps.len);
 
@@ -1786,20 +1800,24 @@ test "houses" {
         try testing.expectEqual(expected, cusp);
     }
 
-    var gauquelin_sectors = try houses(testing.allocator, 2440587.5, 0, 0, 'G');
+    var gauquelin_sectors = try houses(testing.allocator, 2440587.5, 0, 0, 'G', undefined);
     defer gauquelin_sectors.deinit(testing.allocator);
     try testing.expectEqual(36, gauquelin_sectors.cusps.len);
 
     // Houses for latitudes north of the Arctic Circle and south of the Antactic
     // Circle can't be represented in many house systems. When this happens,
     // Swiss Ephemeris falls back to using the Porphyry house system.
+    var diags = Diagnostics.init(testing.allocator);
     const svalbard_lat = 78.22;
     const svalbard_lon = 15.65;
-    _ = houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P') catch |err| {
+    var porphyry_houses = try houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P', &diags);
+    defer porphyry_houses.deinit(testing.allocator);
+    defer diags.deinit();
+    try testing.expect(diags.err != null);
+    if (diags.err) |err| {
         try testing.expect(err == SweErr.PorphyryFallback);
-        return;
-    };
-    try testing.expect(false);
+    }
+    try testing.expectEqual(12, porphyry_houses.cusps.len);
 }
 
 pub const defs = struct {
