@@ -1730,8 +1730,6 @@ const HousePoints = struct {
     polar_asc: f64,
 };
 
-/// Caller is responsible for freeing the returned Houses.cusps field
-/// using the same allocator passed to this function.
 pub fn houses(
     allocator: Allocator,
     tjd_ut: f64,
@@ -1811,6 +1809,96 @@ test "houses" {
     const svalbard_lat = 78.22;
     const svalbard_lon = 15.65;
     var porphyry_houses = try houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P', &diags);
+    defer porphyry_houses.deinit(testing.allocator);
+    defer diags.deinit();
+    try testing.expect(diags.err != null);
+    if (diags.err) |err| {
+        try testing.expect(err == SweErr.PorphyryFallback);
+    }
+    try testing.expectEqual(12, porphyry_houses.cusps.len);
+}
+
+pub fn housesEx(
+    allocator: Allocator,
+    tjd_ut: f64,
+    iflag: i32,
+    geolat: f64,
+    geolon: f64,
+    hsys: u8,
+    diags: ?*Diagnostics,
+) !Houses {
+    const cusp_count: usize = if (hsys == 'G') 36 else 12;
+
+    // cusps are assigned to indexes [1..12] for standard systems
+    // or [1..37] for Gauquelin sectors
+    const cusps_buf = try allocator.alloc(f64, cusp_count + 1);
+    defer allocator.free(cusps_buf);
+    // from Swiss Epehmeris' docs:
+    // ascmc must be an array of 10 doubles. ascmc[8... 9] are 0 and may be used for additional points in future releases.
+    var ascmc: [10]f64 = undefined;
+
+    const ret_flag = sweph.swe_houses_ex(
+        tjd_ut,
+        iflag,
+        geolat,
+        geolon,
+        hsys,
+        cusps_buf.ptr,
+        &ascmc,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(
+                SweErr.PorphyryFallback,
+                "impossible to calculate houses for the given house system. will use Porphyry instead.",
+            );
+        }
+    }
+
+    const result = Houses{
+        .cusps = try allocator.alloc(f64, cusp_count),
+        .points = .{
+            .asc = ascmc[sweph.SE_ASC],
+            .mc = ascmc[sweph.SE_MC],
+            .amrc = ascmc[sweph.SE_ARMC],
+            .vertex = ascmc[sweph.SE_VERTEX],
+            .equatorial_asc = ascmc[sweph.SE_EQUASC],
+            .coasc_koch = ascmc[sweph.SE_COASC1],
+            .coasc_munkasey = ascmc[sweph.SE_COASC2],
+            .polar_asc = ascmc[sweph.SE_POLASC],
+        },
+    };
+
+    for (0..cusp_count) |i| {
+        result.cusps[i] = cusps_buf[i + 1];
+    }
+
+    return result;
+}
+
+test "housesEx" {
+    var eql_0_aries_houses = try housesEx(testing.allocator, 2440587.5, sweph.SEFLG_SPEED, 0, 0, 'N', undefined);
+    defer eql_0_aries_houses.deinit(testing.allocator);
+    try testing.expectEqual(12, eql_0_aries_houses.cusps.len);
+
+    for (eql_0_aries_houses.cusps, 0..) |cusp, idx| {
+        const i_expected: usize = idx * 30;
+        const expected: f64 = @floatFromInt(i_expected);
+        try testing.expectEqual(expected, cusp);
+    }
+
+    var gauquelin_sectors = try housesEx(testing.allocator, 2440587.5, sweph.SEFLG_SPEED, 0, 0, 'G', undefined);
+    defer gauquelin_sectors.deinit(testing.allocator);
+    try testing.expectEqual(36, gauquelin_sectors.cusps.len);
+
+    // Houses for latitudes north of the Arctic Circle and south of the Antactic
+    // Circle can't be represented in many house systems. When this happens,
+    // Swiss Ephemeris falls back to using the Porphyry house system.
+    var diags = Diagnostics.init(testing.allocator);
+    const svalbard_lat = 78.22;
+    const svalbard_lon = 15.65;
+    var porphyry_houses = try housesEx(testing.allocator, 2440587.5, sweph.SEFLG_SPEED, svalbard_lat, svalbard_lon, 'P', &diags);
     defer porphyry_houses.deinit(testing.allocator);
     defer diags.deinit();
     try testing.expect(diags.err != null);
