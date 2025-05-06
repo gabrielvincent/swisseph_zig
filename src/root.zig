@@ -2195,7 +2195,7 @@ test "housesArmcEx2" {
 
     const ecl_nut_eph = try calc(2440587.5, sweph.SE_ECL_NUT, sweph.SEFLG_JPLEPH, undefined);
 
-    var eql_0_aries_houses_armc = try housesArmc(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'N', undefined);
+    var eql_0_aries_houses_armc = try housesArmcEx2(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'N', undefined);
     defer eql_0_aries_houses_armc.deinit(testing.allocator);
     try testing.expectEqual(12, eql_0_aries_houses_armc.cusps.len);
 
@@ -2205,7 +2205,7 @@ test "housesArmcEx2" {
         try testing.expectEqual(expected, cusp.lon);
     }
 
-    var gauquelin_sectors = try housesArmc(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'G', undefined);
+    var gauquelin_sectors = try housesArmcEx2(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'G', undefined);
     defer gauquelin_sectors.deinit(testing.allocator);
     try testing.expectEqual(36, gauquelin_sectors.cusps.len);
 
@@ -2219,7 +2219,7 @@ test "housesArmcEx2" {
     var porphyry_houses = try houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P', &diags);
     defer porphyry_houses.deinit(testing.allocator);
 
-    var porphyry_houses_armc = try housesArmc(
+    var porphyry_houses_armc = try housesArmcEx2(
         testing.allocator,
         porphyry_houses.points.armc,
         svalbard_lat,
