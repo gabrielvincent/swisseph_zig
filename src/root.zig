@@ -2236,6 +2236,79 @@ test "housesArmcEx2" {
     try testing.expectEqual(12, porphyry_houses_armc.cusps.len);
 }
 
+pub fn housePos(
+    armc: f64,
+    geolat: f64,
+    eps: f64,
+    hsys: i32,
+    xpin: [2]f64,
+    diags: ?*Diagnostics,
+) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+    @memset(&err_buf, 0);
+
+    const pos = sweph.swe_house_pos(
+        armc,
+        geolat,
+        eps,
+        hsys,
+        @constCast(&xpin),
+        &err_buf,
+    );
+
+    if (utils.strlen(err_buf) > 0) {
+        if (diags) |d| {
+            try d.setErr(SweErr.CalcFailure, &err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return pos;
+}
+
+test "housePos" {
+    var eql_0_aries_houses = try houses(testing.allocator, 2440587.5, 0, 0, 'N', undefined);
+    defer eql_0_aries_houses.deinit(testing.allocator);
+
+    const ecl_nut_eph = try calc(2440587.5, sweph.SE_ECL_NUT, sweph.SEFLG_JPLEPH, undefined);
+
+    const lon_lat = [2]f64{ 0, 0 };
+    const pos = try housePos(
+        eql_0_aries_houses.points.armc,
+        0,
+        ecl_nut_eph.lon,
+        'N',
+        lon_lat,
+        undefined,
+    );
+    try testing.expectEqual(pos, 1);
+
+    var koch_houses = try houses(
+        testing.allocator,
+        2440587.5,
+        0,
+        0,
+        'K',
+        undefined,
+    );
+    defer koch_houses.deinit(testing.allocator);
+
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const svalbard_lon = 15.65;
+    const svalbard_lat = 78.22;
+    _ = housePos(
+        koch_houses.points.armc,
+        svalbard_lat,
+        ecl_nut_eph.lon,
+        'K',
+        [2]f64{ svalbard_lon, svalbard_lat },
+        &diags,
+    ) catch |err| {
+        try testing.expect(err == SweErr.CalcFailure);
+    };
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
