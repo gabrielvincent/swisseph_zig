@@ -2320,6 +2320,90 @@ test "houseName" {
     try testing.expectEqual(name, "Placidus");
 }
 
+pub fn gauquelinSector(
+    t_ut: f64,
+    ipl: i32,
+    starname: ?[]const u8,
+    iflag: i32,
+    imeth: i32,
+    geopos: [3]f64,
+    atpress: ?f64,
+    attemp: ?f64,
+    diags: ?*Diagnostics,
+) !f64 {
+    var err_buf: [256:0]u8 = undefined;
+    var sector: f64 = undefined;
+    var star_buf: [41:0]u8 = undefined;
+    @memset(&star_buf, 0);
+
+    if (starname) |s| {
+        star_buf = utils.strSliceToFixed(s, 41);
+    }
+
+    const ret_flag = sweph.swe_gauquelin_sector(
+        t_ut,
+        ipl,
+        &star_buf,
+        iflag,
+        imeth,
+        @constCast(&geopos),
+        if (atpress) |a| a else undefined,
+        if (attemp) |a| a else undefined,
+        &sector,
+        &err_buf,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(SweErr.CalcFailure, &err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return sector;
+}
+
+test "gauquelinSector" {
+    const sect_planet = try gauquelinSector(
+        2440587.5,
+        sweph.SE_SUN,
+        null,
+        sweph.SEFLG_JPLEPH,
+        3,
+        [3]f64{ 0, 0, 0 },
+        1,
+        25,
+        null,
+    );
+    try testing.expect(sect_planet > 0);
+
+    const sect_star = try gauquelinSector(
+        2440587.5,
+        -999999, // Invalid ipl that should break if no star name is given
+        "Bunda",
+        sweph.SEFLG_JPLEPH,
+        3,
+        [3]f64{ 0, 0, 0 },
+        1,
+        25,
+        null,
+    );
+    try testing.expect(sect_star > 0);
+
+    const omit_press_temp = try gauquelinSector(
+        2440587.5,
+        sweph.SE_SUN,
+        null,
+        sweph.SEFLG_JPLEPH,
+        3,
+        [3]f64{ 0, 0, 0 },
+        null,
+        null,
+        null,
+    );
+    try testing.expect(omit_press_temp > 0);
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
