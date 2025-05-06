@@ -1727,7 +1727,7 @@ const Houses = struct {
 const HousePoints = struct {
     asc: f64,
     mc: f64,
-    amrc: f64,
+    armc: f64,
     vertex: f64,
     equatorial_asc: f64,
     coasc_koch: f64,
@@ -1776,7 +1776,7 @@ pub fn houses(
         .points = .{
             .asc = ascmc[sweph.SE_ASC],
             .mc = ascmc[sweph.SE_MC],
-            .amrc = ascmc[sweph.SE_ARMC],
+            .armc = ascmc[sweph.SE_ARMC],
             .vertex = ascmc[sweph.SE_VERTEX],
             .equatorial_asc = ascmc[sweph.SE_EQUASC],
             .coasc_koch = ascmc[sweph.SE_COASC1],
@@ -1867,7 +1867,7 @@ pub fn housesEx(
         .points = .{
             .asc = ascmc[sweph.SE_ASC],
             .mc = ascmc[sweph.SE_MC],
-            .amrc = ascmc[sweph.SE_ARMC],
+            .armc = ascmc[sweph.SE_ARMC],
             .vertex = ascmc[sweph.SE_VERTEX],
             .equatorial_asc = ascmc[sweph.SE_EQUASC],
             .coasc_koch = ascmc[sweph.SE_COASC1],
@@ -1965,7 +1965,7 @@ pub fn housesEx2(
         .points = .{
             .asc = ascmc[sweph.SE_ASC],
             .mc = ascmc[sweph.SE_MC],
-            .amrc = ascmc[sweph.SE_ARMC],
+            .armc = ascmc[sweph.SE_ARMC],
             .vertex = ascmc[sweph.SE_VERTEX],
             .equatorial_asc = ascmc[sweph.SE_EQUASC],
             .coasc_koch = ascmc[sweph.SE_COASC1],
@@ -2013,6 +2013,111 @@ test "housesEx2" {
         try testing.expect(err == SweErr.PorphyryFallback);
     }
     try testing.expectEqual(12, porphyry_houses.cusps.len);
+}
+
+pub fn housesArmc(
+    allocator: Allocator,
+    armc: f64,
+    geolat: f64,
+    eps: f64,
+    hsys: u8,
+    diags: ?*Diagnostics,
+) !Houses {
+    const cusp_count: usize = if (hsys == 'G') 36 else 12;
+
+    // cusps are assigned to indexes [1..12] for standard systems
+    // or [1..37] for Gauquelin sectors
+    const cusps_buf = try allocator.alloc(f64, cusp_count + 1);
+    defer allocator.free(cusps_buf);
+    // from Swiss Epehmeris' docs:
+    // ascmc must be an array of 10 doubles. ascmc[8... 9] are 0 and may be used for additional points in future releases.
+    var ascmc: [10]f64 = undefined;
+
+    const ret_flag = sweph.swe_houses_armc(
+        armc,
+        geolat,
+        eps,
+        hsys,
+        cusps_buf.ptr,
+        &ascmc,
+    );
+
+    if (ret_flag == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(
+                SweErr.PorphyryFallback,
+                "impossible to calculate houses for the given house system. will use Porphyry instead.",
+            );
+        }
+    }
+
+    const result = Houses{
+        .cusps = try allocator.alloc(Cusp, cusp_count),
+        .points = .{
+            .asc = ascmc[sweph.SE_ASC],
+            .mc = ascmc[sweph.SE_MC],
+            .armc = ascmc[sweph.SE_ARMC],
+            .vertex = ascmc[sweph.SE_VERTEX],
+            .equatorial_asc = ascmc[sweph.SE_EQUASC],
+            .coasc_koch = ascmc[sweph.SE_COASC1],
+            .coasc_munkasey = ascmc[sweph.SE_COASC2],
+            .polar_asc = ascmc[sweph.SE_POLASC],
+        },
+    };
+
+    for (0..cusp_count) |i| {
+        const cusp_lon = cusps_buf[i + 1];
+        result.cusps[i] = Cusp{ .lon = cusp_lon };
+    }
+
+    return result;
+}
+
+test "housesArmc" {
+    var eql_0_aries_houses = try houses(testing.allocator, 2440587.5, 0, 0, 'N', undefined);
+    defer eql_0_aries_houses.deinit(testing.allocator);
+
+    const ecl_nut_eph = try calc(2440587.5, sweph.SE_ECL_NUT, sweph.SEFLG_JPLEPH, undefined);
+
+    var eql_0_aries_houses_armc = try housesArmc(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'N', undefined);
+    defer eql_0_aries_houses_armc.deinit(testing.allocator);
+    try testing.expectEqual(12, eql_0_aries_houses_armc.cusps.len);
+
+    for (eql_0_aries_houses_armc.cusps, 0..) |cusp, idx| {
+        const i_expected: usize = idx * 30;
+        const expected: f64 = @floatFromInt(i_expected);
+        try testing.expectEqual(expected, cusp.lon);
+    }
+
+    var gauquelin_sectors = try housesArmc(testing.allocator, eql_0_aries_houses.points.armc, 0, ecl_nut_eph.lon, 'G', undefined);
+    defer gauquelin_sectors.deinit(testing.allocator);
+    try testing.expectEqual(36, gauquelin_sectors.cusps.len);
+
+    // Houses for latitudes north of the Arctic Circle and south of the Antactic
+    // Circle can't be represented in many house systems. When this happens,
+    // Swiss Ephemeris falls back to using the Porphyry house system.
+    var diags = Diagnostics.init(testing.allocator);
+    defer diags.deinit();
+    const svalbard_lat = 78.22;
+    const svalbard_lon = 15.65;
+    var porphyry_houses = try houses(testing.allocator, 2440587.5, svalbard_lat, svalbard_lon, 'P', &diags);
+    defer porphyry_houses.deinit(testing.allocator);
+
+    var porphyry_houses_armc = try housesArmc(
+        testing.allocator,
+        porphyry_houses.points.armc,
+        svalbard_lat,
+        ecl_nut_eph.lon,
+        'P',
+        &diags,
+    );
+    defer porphyry_houses_armc.deinit(testing.allocator);
+
+    try testing.expect(diags.err != null);
+    if (diags.err) |err| {
+        try testing.expect(err == SweErr.PorphyryFallback);
+    }
+    try testing.expectEqual(12, porphyry_houses_armc.cusps.len);
 }
 
 pub const defs = struct {
