@@ -2309,6 +2309,17 @@ test "housePos" {
     };
 }
 
+pub fn houseName(hsys: u8) []const u8 {
+    const name = sweph.swe_house_name(hsys);
+    const len = utils.strlen(name);
+    return name[0..len];
+}
+
+test "houseName" {
+    const name = houseName('P');
+    try testing.expectEqual(name, "Placidus");
+}
+
 pub const defs = struct {
     pub const SE_AUNIT_TO_KM = sweph.SE_AUNIT_TO_KM;
     pub const SE_AUNIT_TO_LIGHTYEAR = sweph.SE_AUNIT_TO_LIGHTYEAR;
