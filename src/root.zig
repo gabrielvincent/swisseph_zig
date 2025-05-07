@@ -2404,7 +2404,7 @@ test "gauquelinSector" {
     try testing.expect(omit_press_temp > 0);
 }
 
-pub const EclipseAttributes = struct {
+pub const SolarEclipseAttributes = struct {
     /// Fraction of solar diameter covered by moon (magnitude)
     magnitude: f64,
 
@@ -2439,16 +2439,22 @@ pub const EclipseAttributes = struct {
     saros_member: f64,
 };
 
-pub const SolarEclipse = struct {
-    type: i32,
-    position: struct {
-        latitude: f64,
-        longitude: f64,
-    },
-    attributes: EclipseAttributes,
-};
+pub fn Eclipse(comptime T: type) type {
+    return struct {
+        type: i32,
+        position: struct {
+            latitude: f64,
+            longitude: f64,
+        },
+        attributes: T,
+    };
+}
 
-pub fn solEclipseWhere(tjd: f64, ifl: i32, diags: ?*Diagnostics) !SolarEclipse {
+pub fn solEclipseWhere(
+    tjd: f64,
+    ifl: i32,
+    diags: ?*Diagnostics,
+) !Eclipse(SolarEclipseAttributes) {
     var err_buf: [256:0]u8 = undefined;
     var geopos: [2]f64 = undefined;
     var attr: [11]f64 = undefined;
@@ -2468,13 +2474,13 @@ pub fn solEclipseWhere(tjd: f64, ifl: i32, diags: ?*Diagnostics) !SolarEclipse {
         return SweErr.CalcFailure;
     }
 
-    return SolarEclipse{
+    return Eclipse(SolarEclipseAttributes){
         .type = eclipse_type,
         .position = .{
             .longitude = geopos[0],
             .latitude = geopos[1],
         },
-        .attributes = EclipseAttributes{
+        .attributes = .{
             .magnitude = attr[0],
             .diameter_ratio = attr[1],
             .obscuration = attr[2],
@@ -2492,6 +2498,91 @@ pub fn solEclipseWhere(tjd: f64, ifl: i32, diags: ?*Diagnostics) !SolarEclipse {
 
 test "solEclipseWhere" {
     const eclipse = try solEclipseWhere(2460232.233667, sweph.SEFLG_JPLEPH, null);
+    try testing.expectEqual(sweph.SE_ECL_ANNULAR | sweph.SE_ECL_CENTRAL, eclipse.type);
+}
+
+const LunarOccultationAttributes = struct {
+    /// Fraction of solar diameter covered by moon (magnitude)
+    magnitude: f64,
+
+    /// Ratio of lunar diameter to solar one
+    diameter_ratio: f64,
+
+    /// Fraction of solar disc covered by moon (obscuration)
+    obscuration: f64,
+
+    /// Diameter of core shadow in km
+    core_shadow_diameter_km: f64,
+
+    /// Azimuth of object at time of eclipse
+    obj_azimuth: f64,
+
+    /// True altitude of object above horizon
+    obj_true_altitude: f64,
+
+    /// Apparent altitude of object above horizon
+    obj_apparent_altitude: f64,
+
+    /// Angular distance of moon from object in degrees
+    moon_angular_distance: f64,
+};
+
+pub fn lunOccultWhere(
+    tjd: f64,
+    ipl: i32,
+    starname: ?[]const u8,
+    ifl: i32,
+    diags: ?*Diagnostics,
+) !Eclipse(LunarOccultationAttributes) {
+    var err_buf: [256:0]u8 = undefined;
+    var geopos: [2]f64 = undefined;
+    var attr: [8]f64 = undefined;
+
+    var star_buf: [41:0]u8 = undefined;
+    @memset(&star_buf, 0);
+
+    if (starname) |s| {
+        star_buf = utils.strSliceToFixed(s, 41);
+    }
+
+    const eclipse_type = sweph.swe_lun_occult_where(
+        tjd,
+        ipl,
+        &star_buf,
+        ifl,
+        &geopos,
+        &attr,
+        &err_buf,
+    );
+
+    if (eclipse_type == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(SweErr.CalcFailure, &err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return .{
+        .type = eclipse_type,
+        .position = .{
+            .longitude = geopos[0],
+            .latitude = geopos[1],
+        },
+        .attributes = .{
+            .magnitude = attr[0],
+            .diameter_ratio = attr[1],
+            .obscuration = attr[2],
+            .core_shadow_diameter_km = attr[3],
+            .obj_azimuth = attr[4],
+            .obj_true_altitude = attr[5],
+            .obj_apparent_altitude = attr[6],
+            .moon_angular_distance = attr[7],
+        },
+    };
+}
+
+test "lunOccultWhere" {
+    const eclipse = try lunOccultWhere(2460232.233667, sweph.SE_SUN, null, sweph.SEFLG_JPLEPH, null);
     try testing.expectEqual(sweph.SE_ECL_ANNULAR | sweph.SE_ECL_CENTRAL, eclipse.type);
 }
 
