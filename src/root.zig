@@ -88,7 +88,7 @@ pub fn heliacalUt(
     var dret: [50]f64 = undefined; // Array to store results
     var err_buf: [256:0]u8 = undefined;
 
-    var object_name_buf = utils.strSliceToFixed(object_name, 256);
+    var object_name_buf = utils.toSentinelFixed(u8, object_name, 256);
 
     const ret_val = sweph.swe_heliacal_ut(
         jd_start,
@@ -1034,7 +1034,7 @@ pub fn fixstar(
 ) !CalcOut {
     var xx: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar(&star_buf, tjd, iflag, &xx, &err_buf);
 
@@ -1068,7 +1068,7 @@ pub fn fixstarUt(
 ) !CalcOut {
     var xx: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar_ut(&star_buf, tjd_ut, iflag, &xx, &err_buf);
 
@@ -1097,7 +1097,7 @@ test "fixstarUt" {
 pub fn fixstarMag(star: []const u8, diags: ?*Diagnostics) !f64 {
     var mag: f64 = undefined;
     var err_buf: [256]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar_mag(&star_buf, &mag, &err_buf);
 
@@ -1123,7 +1123,7 @@ pub fn fixstar2(
 ) !CalcOut {
     var xx: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar2(&star_buf, tjd, iflag, &xx, &err_buf);
 
@@ -1157,7 +1157,7 @@ pub fn fixstar2Ut(
 ) !CalcOut {
     var xx: [6]f64 = undefined;
     var err_buf: [256:0]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar2_ut(&star_buf, tjd_ut, iflag, &xx, &err_buf);
 
@@ -1186,7 +1186,7 @@ test "fixstar2Ut" {
 pub fn fixstar2Mag(star: []const u8, diags: ?*Diagnostics) !f64 {
     var mag: f64 = undefined;
     var err_buf: [256]u8 = undefined;
-    var star_buf = utils.strSliceToFixed(star, 41);
+    var star_buf = utils.toSentinelFixed(u8, star, 41);
 
     const ret_flag = sweph.swe_fixstar2_mag(&star_buf, &mag, &err_buf);
 
@@ -2337,7 +2337,7 @@ pub fn gauquelinSector(
     @memset(&star_buf, 0);
 
     if (starname) |s| {
-        star_buf = utils.strSliceToFixed(s, 41);
+        star_buf = utils.toSentinelFixed(u8, s, 41);
     }
 
     const ret_flag = sweph.swe_gauquelin_sector(
@@ -2445,6 +2445,7 @@ pub fn Eclipse(comptime T: type) type {
         position: struct {
             latitude: f64,
             longitude: f64,
+            altitude: f64,
         },
         attributes: T,
     };
@@ -2456,7 +2457,7 @@ pub fn solEclipseWhere(
     diags: ?*Diagnostics,
 ) !Eclipse(SolarEclipseAttributes) {
     var err_buf: [256:0]u8 = undefined;
-    var geopos: [2]f64 = undefined;
+    var geopos: [3]f64 = undefined;
     var attr: [11]f64 = undefined;
 
     const eclipse_type = sweph.swe_sol_eclipse_where(
@@ -2479,6 +2480,7 @@ pub fn solEclipseWhere(
         .position = .{
             .longitude = geopos[0],
             .latitude = geopos[1],
+            .altitude = geopos[2],
         },
         .attributes = .{
             .magnitude = attr[0],
@@ -2535,14 +2537,14 @@ pub fn lunOccultWhere(
     diags: ?*Diagnostics,
 ) !Eclipse(LunarOccultationAttributes) {
     var err_buf: [256:0]u8 = undefined;
-    var geopos: [2]f64 = undefined;
+    var geopos: [3]f64 = undefined;
     var attr: [8]f64 = undefined;
 
     var star_buf: [41:0]u8 = undefined;
     @memset(&star_buf, 0);
 
     if (starname) |s| {
-        star_buf = utils.strSliceToFixed(s, 41);
+        star_buf = utils.toSentinelFixed(u8, s, 41);
     }
 
     const eclipse_type = sweph.swe_lun_occult_where(
@@ -2567,6 +2569,7 @@ pub fn lunOccultWhere(
         .position = .{
             .longitude = geopos[0],
             .latitude = geopos[1],
+            .altitude = geopos[2],
         },
         .attributes = .{
             .magnitude = attr[0],
@@ -2583,6 +2586,73 @@ pub fn lunOccultWhere(
 
 test "lunOccultWhere" {
     const eclipse = try lunOccultWhere(2460232.233667, sweph.SE_SUN, null, sweph.SEFLG_JPLEPH, null);
+    try testing.expectEqual(sweph.SE_ECL_ANNULAR | sweph.SE_ECL_CENTRAL, eclipse.type);
+}
+
+pub fn solEclipseHow(
+    tjd_ut: f64,
+    ifl: i32,
+    geopos: [3]f64,
+    diags: ?*Diagnostics,
+) !Eclipse(SolarEclipseAttributes) {
+    var err_buf: [256:0]u8 = undefined;
+    var attr: [11]f64 = undefined;
+
+    const eclipse_type = sweph.swe_sol_eclipse_how(
+        tjd_ut,
+        ifl,
+        @constCast(&geopos),
+        &attr,
+        &err_buf,
+    );
+
+    if (eclipse_type == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(SweErr.CalcFailure, &err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return Eclipse(SolarEclipseAttributes){
+        .type = eclipse_type,
+        .position = .{
+            .longitude = geopos[0],
+            .latitude = geopos[1],
+            .altitude = geopos[2],
+        },
+        .attributes = .{
+            .magnitude = attr[0],
+            .diameter_ratio = attr[1],
+            .obscuration = attr[2],
+            .core_shadow_diameter_km = attr[3],
+            .sun_azimuth = attr[4],
+            .sun_true_altitude = attr[5],
+            .sun_apparent_altitude = attr[6],
+            .moon_angular_distance = attr[7],
+            .nasa_magnitude = attr[8],
+            .saros_series = attr[9],
+            .saros_member = attr[10],
+        },
+    };
+}
+
+test "solEclipseHow" {
+    const eclipse1 = try solEclipseWhere(
+        2460232.233667,
+        sweph.SEFLG_JPLEPH,
+        null,
+    );
+    std.debug.print("loca: {any}\n", .{eclipse1.position});
+    const eclipse = try solEclipseHow(
+        2460232.233667,
+        sweph.SEFLG_JPLEPH,
+        [3]f64{
+            eclipse1.position.longitude,
+            eclipse1.position.latitude,
+            eclipse1.position.altitude,
+        },
+        null,
+    );
     try testing.expectEqual(sweph.SE_ECL_ANNULAR | sweph.SE_ECL_CENTRAL, eclipse.type);
 }
 
