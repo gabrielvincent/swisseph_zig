@@ -2642,7 +2642,6 @@ test "solEclipseHow" {
         sweph.SEFLG_JPLEPH,
         null,
     );
-    std.debug.print("loca: {any}\n", .{eclipse1.position});
     const eclipse = try solEclipseHow(
         2460232.233667,
         sweph.SEFLG_JPLEPH,
@@ -2654,6 +2653,116 @@ test "solEclipseHow" {
         null,
     );
     try testing.expectEqual(sweph.SE_ECL_ANNULAR | sweph.SE_ECL_CENTRAL, eclipse.type);
+}
+
+pub const SearchDirection = enum {
+    Forward,
+    Backward,
+};
+
+pub fn EclipseWhen(comptime T: type) type {
+    return struct {
+        type: i32,
+        position: struct {
+            latitude: f64,
+            longitude: f64,
+            altitude: f64,
+        },
+        attributes: T,
+        events_jd: struct {
+            max_eclipse: f64,
+            first_contact: f64,
+            second_contact: f64,
+            third_contact: f64,
+            fourth_contact: f64,
+            sunrinse: f64,
+            sunset: f64,
+        },
+    };
+}
+
+pub fn solEclipseWhenLoc(
+    tjd_start: f64,
+    ifl: i32,
+    geopos: [3]f64,
+    search_direction: SearchDirection,
+    diags: ?*Diagnostics,
+) !EclipseWhen(SolarEclipseAttributes) {
+    var err_buf: [256:0]u8 = undefined;
+    var tret: [10]f64 = undefined;
+    var attr: [20]f64 = undefined;
+
+    const eclipse_type = sweph.swe_sol_eclipse_when_loc(
+        tjd_start,
+        ifl,
+        @constCast(&geopos),
+        &tret,
+        &attr,
+        if (search_direction == .Forward) sweph.FALSE else sweph.TRUE,
+        &err_buf,
+    );
+
+    if (eclipse_type == @intFromEnum(SweRetFlag.ERR)) {
+        if (diags) |d| {
+            try d.setErr(SweErr.CalcFailure, &err_buf);
+        }
+        return SweErr.CalcFailure;
+    }
+
+    return EclipseWhen(SolarEclipseAttributes){
+        .type = eclipse_type,
+        .position = .{
+            .longitude = geopos[0],
+            .latitude = geopos[1],
+            .altitude = geopos[2],
+        },
+        .attributes = .{
+            .magnitude = attr[0],
+            .diameter_ratio = attr[1],
+            .obscuration = attr[2],
+            .core_shadow_diameter_km = attr[3],
+            .sun_azimuth = attr[4],
+            .sun_true_altitude = attr[5],
+            .sun_apparent_altitude = attr[6],
+            .moon_angular_distance = attr[7],
+            .nasa_magnitude = attr[8],
+            .saros_series = attr[9],
+            .saros_member = attr[10],
+        },
+        .events_jd = .{
+            .max_eclipse = tret[0],
+            .first_contact = tret[1],
+            .second_contact = tret[2],
+            .third_contact = tret[3],
+            .fourth_contact = tret[4],
+            .sunrinse = tret[5],
+            .sunset = tret[6],
+        },
+    };
+}
+
+test "solEclipseWhenLoc" {
+    const start_jd = try dateConversion(1970, 1, 1, 0, .g);
+    const eclipse = try solEclipseWhenLoc(
+        start_jd,
+        sweph.SEFLG_JPLEPH,
+        [_]f64{ 22, -43, 0 },
+        .Forward,
+        null,
+    );
+    const max_eclipse_utc = revjul(
+        eclipse.events_jd.max_eclipse,
+        sweph.SE_GREG_CAL,
+    );
+
+    try testing.expectEqual(
+        sweph.SE_ECL_PARTIAL | sweph.SE_ECL_VISIBLE | sweph.SE_ECL_MAX_VISIBLE | sweph.SE_ECL_1ST_VISIBLE | sweph.SE_ECL_4TH_VISIBLE,
+        eclipse.type,
+    );
+    try testing.expectEqual(1973, max_eclipse_utc.year);
+    try testing.expectEqual(1, max_eclipse_utc.month);
+    try testing.expectEqual(4, max_eclipse_utc.day);
+    try testing.expectApproxEqRel(16.77, max_eclipse_utc.hour, 0.001);
 }
 
 pub const defs = struct {
